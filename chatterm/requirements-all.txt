@@ -1,0 +1,24 @@
+# All optional dependencies
+-r requirements.txt
+
+# LLM Providers
+langchain-openai>=0.2.0
+langchain-anthropic>=0.2.0
+langchain-community>=0.3.0
+boto3>=1.28.0
+
+# Storage
+aiosqlite>=0.19.0
+
+# Observability
+mlflow>=2.9.0
+
+# FastAPI
+fastapi>=0.115.0
+uvicorn>=0.32.0
+
+# Development tools
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+ruff>=0.1.0
