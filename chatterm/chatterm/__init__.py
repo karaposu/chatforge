@@ -21,6 +21,8 @@ from .app import ChatTermApp, create_app
 from .display import Display
 from .commands import CommandHandler
 from .logger import SimpleLogger, logger, setup_logging
+from .menu import ChatTermMenu, MenuState, MenuItem
+from .launcher import launch_chatterm
 
 __version__ = "0.1.0"
 __all__ = [
@@ -46,6 +48,12 @@ __all__ = [
     "SimpleLogger",
     "logger",
     "setup_logging",
+    # Menu
+    "ChatTermMenu",
+    "MenuState",
+    "MenuItem",
+    # Launcher
+    "launch_chatterm",
     # Version
     "__version__",
 ]
