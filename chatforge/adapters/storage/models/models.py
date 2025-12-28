@@ -213,6 +213,7 @@ class Message(Base):
         thumbs_up_count: Number of thumbs up reactions
         thumbs_down_count: Number of thumbs down reactions
         text_feedback: User-provided text feedback
+        generation_request_data: For AI messages - the full prompt/request sent to LLM (debug)
         metadata_: App-specific data (attachments, reactions, etc.)
         created_at: When message was sent
         deleted_at: Soft delete timestamp
@@ -246,6 +247,7 @@ class Message(Base):
     thumbs_up_count = Column(Integer, default=0, nullable=False)
     thumbs_down_count = Column(Integer, default=0, nullable=False)
     text_feedback = Column(Text, nullable=True)
+    generation_request_data = Column(JSON, nullable=True)  # Full LLM prompt for debug (AI messages only)
     metadata_ = Column("metadata", JSON, default=dict, nullable=False)
     created_at = Column(DateTime, default=_utc_now, nullable=False)
     deleted_at = Column(DateTime, nullable=True)
@@ -293,6 +295,7 @@ class Message(Base):
             "thumbs_up_count": self.thumbs_up_count,
             "thumbs_down_count": self.thumbs_down_count,
             "text_feedback": self.text_feedback,
+            "generation_request_data": self.generation_request_data,
             "metadata": self.metadata_,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "deleted_at": self.deleted_at.isoformat() if self.deleted_at else None,

@@ -46,6 +46,22 @@ from chatforge.ports.tracing import (
     NullTracingAdapter,
     TracingPort,
 )
+from chatforge.ports.tts import (
+    TTSPort,
+    VoiceConfig,
+    AudioResult,
+    VoiceInfo,
+    AudioFormat,
+    AudioQuality,
+    TTSError,
+    TTSNetworkError,
+    TTSAuthenticationError,
+    TTSQuotaExceededError,
+    TTSRateLimitError,
+    TTSInvalidVoiceError,
+    TTSInvalidInputError,
+    TTSStreamingNotSupportedError,
+)
 
 __all__ = [
     # Messaging Platform Integration
@@ -79,4 +95,19 @@ __all__ = [
     # Tracing
     "TracingPort",
     "NullTracingAdapter",
+    # TTS
+    "TTSPort",
+    "VoiceConfig",
+    "AudioResult",
+    "VoiceInfo",
+    "AudioFormat",
+    "AudioQuality",
+    "TTSError",
+    "TTSNetworkError",
+    "TTSAuthenticationError",
+    "TTSQuotaExceededError",
+    "TTSRateLimitError",
+    "TTSInvalidVoiceError",
+    "TTSInvalidInputError",
+    "TTSStreamingNotSupportedError",
 ]
