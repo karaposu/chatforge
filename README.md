@@ -1,5 +1,15 @@
 # Chatforge
 
+Building blocks for AI & chat applications at 3 levels of abstraction.
+
+
+### Services: For Rapid Development
+### Ports: For Flexibility and Testing
+### Adapters: For Full Control
+
+
+which
+
 Decouple your chat application from infrastructure.
 
   Whether it's:

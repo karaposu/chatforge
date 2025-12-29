@@ -207,8 +207,8 @@ class ElevenLabsTTSAdapter(TTSPort):
             }
 
         try:
-            # Call ElevenLabs API (async)
-            audio_data = await self._client.text_to_speech.convert(
+            # Call ElevenLabs API - returns async generator
+            audio_stream = self._client.text_to_speech.convert(
                 voice_id=config.voice_id,
                 text=text,
                 model_id=model or "eleven_multilingual_v2",
@@ -216,16 +216,11 @@ class ElevenLabsTTSAdapter(TTSPort):
                 voice_settings=voice_settings,
             )
 
-            # Collect bytes if async generator
-            if hasattr(audio_data, "__aiter__"):
-                chunks = []
-                async for chunk in audio_data:
-                    chunks.append(chunk)
-                audio_bytes = b"".join(chunks)
-            elif hasattr(audio_data, "__iter__") and not isinstance(audio_data, bytes):
-                audio_bytes = b"".join(audio_data)
-            else:
-                audio_bytes = audio_data
+            # Collect all chunks from the async generator
+            chunks = []
+            async for chunk in audio_stream:
+                chunks.append(chunk)
+            audio_bytes = b"".join(chunks)
 
             return AudioResult(
                 audio_bytes=audio_bytes,
@@ -277,8 +272,8 @@ class ElevenLabsTTSAdapter(TTSPort):
             }
 
         try:
-            # Get async stream from ElevenLabs
-            audio_stream = await self._client.text_to_speech.convert_as_stream(
+            # Get async stream from ElevenLabs - returns async generator directly
+            audio_stream = self._client.text_to_speech.convert_as_stream(
                 voice_id=config.voice_id,
                 text=text,
                 model_id=model or "eleven_multilingual_v2",
