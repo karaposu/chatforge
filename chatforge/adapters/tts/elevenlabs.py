@@ -175,7 +175,7 @@ class ElevenLabsTTSAdapter(TTSPort):
             config: Voice configuration (VoiceConfig or ElevenLabsVoiceConfig)
             output_format: Desired audio format
             quality: Audio quality tier
-            model: ElevenLabs model ID (default: eleven_multilingual_v2)
+            model: ElevenLabs model ID (default: eleven_v3)
 
         Returns:
             AudioResult with synthesized audio
@@ -196,22 +196,24 @@ class ElevenLabsTTSAdapter(TTSPort):
         format_str = self._get_provider_format(output_format, quality)
         format_info = self._FORMAT_INFO.get(format_str, {})
 
-        # Build voice settings
-        voice_settings = None
+        # Build voice settings - stability is in base VoiceConfig
+        voice_settings = {
+            "stability": config.stability,
+        }
+        # Add ElevenLabs-specific settings if using ElevenLabsVoiceConfig
         if isinstance(config, ElevenLabsVoiceConfig):
-            voice_settings = {
-                "stability": config.stability,
+            voice_settings.update({
                 "similarity_boost": config.similarity_boost,
                 "style": config.style_exaggeration,
                 "use_speaker_boost": config.use_speaker_boost,
-            }
+            })
 
         try:
             # Call ElevenLabs API - returns async generator
             audio_stream = self._client.text_to_speech.convert(
                 voice_id=config.voice_id,
                 text=text,
-                model_id=model or "eleven_multilingual_v2",
+                model_id=model or "eleven_v3",
                 output_format=format_str,
                 voice_settings=voice_settings,
             )
@@ -264,19 +266,22 @@ class ElevenLabsTTSAdapter(TTSPort):
 
         format_str = self._get_provider_format(output_format, quality)
 
-        voice_settings = None
+        # Build voice settings - stability is in base VoiceConfig
+        voice_settings = {
+            "stability": config.stability,
+        }
+        # Add ElevenLabs-specific settings if using ElevenLabsVoiceConfig
         if isinstance(config, ElevenLabsVoiceConfig):
-            voice_settings = {
-                "stability": config.stability,
+            voice_settings.update({
                 "similarity_boost": config.similarity_boost,
-            }
+            })
 
         try:
             # Get async stream from ElevenLabs - returns async generator directly
             audio_stream = self._client.text_to_speech.convert_as_stream(
                 voice_id=config.voice_id,
                 text=text,
-                model_id=model or "eleven_multilingual_v2",
+                model_id=model or "eleven_v3",
                 output_format=format_str,
                 voice_settings=voice_settings,
             )

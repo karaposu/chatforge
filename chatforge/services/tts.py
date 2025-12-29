@@ -8,28 +8,31 @@ Features:
 - Multiple TTS providers (ElevenLabs, OpenAI)
 - Simple API with sensible defaults
 - Streaming support
-- Provider-agnostic configuration
+- Provider-agnostic configuration via VoiceConfig
 
 Usage:
     from chatforge.services import TTSService
+    from chatforge.ports.tts import VoiceConfig
 
-    # Simple usage with defaults
+    # Simple usage with defaults (uses default voice)
     async with TTSService() as tts:
         result = await tts.generate("Hello world!")
         with open("output.mp3", "wb") as f:
             f.write(result.audio_bytes)
 
-    # With specific provider and voice
+    # With custom VoiceConfig
     async with TTSService(provider="elevenlabs") as tts:
-        result = await tts.generate(
-            "Hello world!",
+        config = VoiceConfig(
             voice_id="21m00Tcm4TlvDq8ikWAM",
+            stability=0.3,  # More expressive
             quality="high",
         )
+        result = await tts.generate("Hello world!", config)
 
     # Streaming
     async with TTSService() as tts:
-        async for chunk in tts.stream("Long text here..."):
+        config = VoiceConfig(voice_id=tts.default_voice)
+        async for chunk in tts.stream("Long text here...", config):
             audio_buffer.write(chunk)
 """
 
@@ -83,22 +86,20 @@ class TTSService:
     switch implementations.
 
     Example:
-        # OpenAI (default)
+        from chatforge.ports.tts import VoiceConfig
+
+        # Simple usage (uses default voice)
         async with TTSService() as tts:
             result = await tts.generate("Hello!")
 
-        # ElevenLabs
+        # ElevenLabs with custom config
         async with TTSService("elevenlabs") as tts:
-            result = await tts.generate("Hello!")
-
-        # With options
-        async with TTSService("openai") as tts:
-            result = await tts.generate(
-                "Hello!",
-                voice_id="alloy",
+            config = VoiceConfig(
+                voice_id="21m00Tcm4TlvDq8ikWAM",
+                stability=0.5,
                 quality="high",
-                output_format="mp3",
             )
+            result = await tts.generate("Hello!", config)
     """
 
     def __init__(
@@ -158,9 +159,8 @@ class TTSService:
     async def generate(
         self,
         text: str,
+        config: VoiceConfig | None = None,
         *,
-        voice_id: str | None = None,
-        quality: QualityType = "standard",
         output_format: Literal["mp3", "wav", "ogg", "pcm"] = "mp3",
         model: str | None = None,
     ) -> AudioResult:
@@ -169,8 +169,7 @@ class TTSService:
 
         Args:
             text: Text to synthesize
-            voice_id: Voice ID (uses provider default if not specified)
-            quality: Audio quality ("low", "standard", "high")
+            config: Voice configuration (uses default voice if not specified)
             output_format: Output format ("mp3", "wav", "ogg", "pcm")
             model: Optional model override
 
@@ -178,22 +177,28 @@ class TTSService:
             AudioResult with audio bytes and metadata
 
         Example:
+            from chatforge.ports.tts import VoiceConfig
+
+            # Simple usage with defaults
             result = await tts.generate("Hello world!")
-            print(f"Generated {len(result.audio_bytes)} bytes")
+
+            # With custom config (quality is in VoiceConfig)
+            config = VoiceConfig(voice_id="...", stability=0.3, quality="high")
+            result = await tts.generate("Hello world!", config)
         """
         adapter = self._ensure_adapter()
 
-        # Use default voice if not specified
-        voice = voice_id or DEFAULT_VOICES[self.provider]
-        config = VoiceConfig(voice_id=voice)
+        # Use default voice if config not specified
+        if config is None:
+            config = VoiceConfig(voice_id=DEFAULT_VOICES[self.provider])
 
         # Map quality and format
-        audio_quality = QUALITY_MAP[quality]
+        audio_quality = QUALITY_MAP.get(config.quality, AudioQuality.STANDARD)
         audio_format = self._map_format(output_format)
 
         logger.info(
-            f"Generating TTS: provider={self.provider}, voice={voice}, "
-            f"quality={quality}, format={output_format}, chars={len(text)}"
+            f"Generating TTS: provider={self.provider}, voice={config.voice_id}, "
+            f"quality={config.quality}, format={output_format}, chars={len(text)}"
         )
 
         result = await adapter.synthesize(
@@ -210,9 +215,8 @@ class TTSService:
     async def stream(
         self,
         text: str,
+        config: VoiceConfig | None = None,
         *,
-        voice_id: str | None = None,
-        quality: QualityType = "standard",
         output_format: Literal["mp3", "wav", "ogg", "pcm"] = "mp3",
         model: str | None = None,
     ) -> AsyncIterator[bytes]:
@@ -221,8 +225,7 @@ class TTSService:
 
         Args:
             text: Text to synthesize
-            voice_id: Voice ID (uses provider default if not specified)
-            quality: Audio quality ("low", "standard", "high")
+            config: Voice configuration (uses default voice if not specified)
             output_format: Output format ("mp3", "wav", "ogg", "pcm")
             model: Optional model override
 
@@ -230,19 +233,29 @@ class TTSService:
             Audio data chunks as bytes
 
         Example:
+            from chatforge.ports.tts import VoiceConfig
+
+            # Simple usage with defaults
             async for chunk in tts.stream("Hello world!"):
+                audio_buffer.write(chunk)
+
+            # With custom config (quality is in VoiceConfig)
+            config = VoiceConfig(voice_id="...", stability=0.3, quality="high")
+            async for chunk in tts.stream("Hello world!", config):
                 audio_buffer.write(chunk)
         """
         adapter = self._ensure_adapter()
 
-        voice = voice_id or DEFAULT_VOICES[self.provider]
-        config = VoiceConfig(voice_id=voice)
-        audio_quality = QUALITY_MAP[quality]
+        # Use default voice if config not specified
+        if config is None:
+            config = VoiceConfig(voice_id=DEFAULT_VOICES[self.provider])
+
+        audio_quality = QUALITY_MAP.get(config.quality, AudioQuality.STANDARD)
         audio_format = self._map_format(output_format)
 
         logger.info(
-            f"Streaming TTS: provider={self.provider}, voice={voice}, "
-            f"chars={len(text)}"
+            f"Streaming TTS: provider={self.provider}, voice={config.voice_id}, "
+            f"quality={config.quality}, chars={len(text)}"
         )
 
         async for chunk in adapter.stream(

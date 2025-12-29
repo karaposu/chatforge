@@ -151,11 +151,15 @@ class VoiceConfig:
         voice_id: Provider-specific voice identifier
         language_code: BCP-47 language code (default: en-US)
         speed: Speech rate multiplier (0.25 - 4.0, default: 1.0)
+        stability: Voice stability (0.0 = expressive, 1.0 = consistent, default: 0.5)
+        quality: Audio quality ("low", "standard", "high", default: "standard")
     """
 
     voice_id: str
     language_code: str = "en-US"
     speed: float = 1.0  # 0.25 - 4.0
+    stability: float = 0.5  # 0.0 (expressive) - 1.0 (consistent)
+    quality: str = "standard"  # "low", "standard", "high"
 
 
 @dataclass
