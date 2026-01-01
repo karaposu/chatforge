@@ -2,6 +2,8 @@
 
 *Designing Chatforge's RealtimeVoiceAPIPort based on realtimevoiceapi implementation analysis.*
 
+**Related:** See `devdocs/enhancements/websocket_infrastructure/` for the shared WebSocket client infrastructure that adapters will use internally.
+
 ---
 
 ## What is RealtimeVoiceAPIPort?
@@ -16,6 +18,7 @@ It handles:
 - **Tool/function calling**
 - **Voice activity detection** (server-side VAD)
 - **Session management**
+
 
 ### Why "RealtimeVoiceAPIPort"?
 
@@ -703,17 +706,158 @@ class VoiceEventType(str, Enum):
 
 ## Part 5: Adapter Implementation Notes
 
+### 5.0 WebSocket Infrastructure Integration
+
+Adapters use the shared `WebSocketClient` from `chatforge/infrastructure/websocket/`. This provides production-ready features out of the box:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    OpenAIRealtimeAdapter                            │
+│                                                                     │
+│   ┌─────────────────────────────────────────────────────────────┐   │
+│   │                    WebSocketClient                          │   │
+│   │  (from infrastructure/websocket/)                           │   │
+│   │                                                             │   │
+│   │  Features we get for FREE:                                  │   │
+│   │  ├── Automatic reconnection with exponential backoff        │   │
+│   │  ├── Ping/pong heartbeat (dead connection detection)        │   │
+│   │  ├── Send queue with backpressure handling                  │   │
+│   │  ├── Connection metrics (messages, bytes, uptime)           │   │
+│   │  ├── Async callback support                                 │   │
+│   │  ├── Connection leak prevention                             │   │
+│   │  └── Receive overflow notification                          │   │
+│   └─────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│   Adapter responsibilities:                                         │
+│   ├── Translate VoiceSessionConfig → OpenAI session format          │
+│   ├── Translate OpenAI events → VoiceEvent                          │
+│   ├── Handle OpenAI-specific message types                          │
+│   └── Base64 encode/decode audio chunks                             │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Key benefit**: Adapter code focuses on OpenAI protocol translation, not WebSocket concerns.
+
 ### 5.1 OpenAI Adapter Structure
 
 ```
 chatforge/adapters/realtime/openai/
 ├── __init__.py          # Exports OpenAIRealtimeAdapter
-├── adapter.py           # Main adapter class
-├── websocket.py         # WebSocket connection utility
+├── adapter.py           # Main adapter class (uses WebSocketClient)
 ├── messages.py          # OpenAI message factory
-├── translator.py        # Event translation
+├── translator.py        # Event translation (OpenAI → VoiceEvent)
 └── config.py            # Config translation helpers
 ```
+
+**Note**: No custom `websocket.py` needed - we use `infrastructure/websocket/WebSocketClient`.
+
+### 5.1b Adapter Implementation Example
+
+```python
+"""OpenAI Realtime adapter using shared WebSocket infrastructure."""
+
+import base64
+from typing import AsyncGenerator
+
+from chatforge.ports.realtime_voice import RealtimeVoiceAPIPort, VoiceEvent, VoiceSessionConfig
+from chatforge.infrastructure.websocket import (
+    WebSocketClient,
+    WebSocketConfig,
+    JsonSerializer,
+)
+
+from .translator import translate_event
+from .config import to_openai_session
+
+
+class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
+    """OpenAI Realtime API adapter."""
+
+    def __init__(self, api_key: str, model: str = "gpt-4o-realtime-preview"):
+        self._api_key = api_key
+        self._model = model
+        self._ws: WebSocketClient | None = None
+        self._config: VoiceSessionConfig | None = None
+
+    async def connect(self, config: VoiceSessionConfig) -> None:
+        """Connect to OpenAI Realtime API."""
+        self._config = config
+
+        # Configure WebSocketClient with OpenAI settings
+        ws_config = WebSocketConfig(
+            url=f"wss://api.openai.com/v1/realtime?model={self._model}",
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "OpenAI-Beta": "realtime=v1",
+            },
+            serializer=JsonSerializer(),
+            # Production features from shared infrastructure:
+            auto_reconnect=True,
+            max_reconnect_attempts=5,
+            ping_interval=20.0,
+            enable_metrics=True,
+            enable_send_queue=True,  # Backpressure protection
+        )
+
+        self._ws = WebSocketClient(ws_config)
+
+        # Wire up reconnection callback
+        self._ws.on_reconnecting = lambda attempt: self._on_reconnecting(attempt)
+
+        await self._ws.connect()
+
+        # Send session configuration
+        await self._ws.send_json({
+            "type": "session.update",
+            "session": to_openai_session(config),
+        })
+
+    async def disconnect(self) -> None:
+        """Disconnect from OpenAI."""
+        if self._ws:
+            await self._ws.disconnect()
+            self._ws = None
+
+    def is_connected(self) -> bool:
+        """Check if connected."""
+        return self._ws is not None and self._ws.is_connected
+
+    async def send_audio(self, chunk: bytes) -> None:
+        """Send audio chunk to OpenAI."""
+        if not self._ws:
+            raise RuntimeError("Not connected")
+
+        # Translate to OpenAI format
+        await self._ws.send_json({
+            "type": "input_audio_buffer.append",
+            "audio": base64.b64encode(chunk).decode(),
+        })
+
+    async def events(self) -> AsyncGenerator[VoiceEvent, None]:
+        """Stream normalized events from OpenAI."""
+        if not self._ws:
+            raise RuntimeError("Not connected")
+
+        async for msg in self._ws.messages():
+            # Translate OpenAI event → VoiceEvent
+            event = translate_event(msg.as_text())
+            if event:
+                yield event
+
+    def _on_reconnecting(self, attempt: int) -> None:
+        """Handle reconnection - re-send session config."""
+        # WebSocketClient handles the actual reconnection
+        # We just need to re-configure the session after reconnect
+        pass
+
+    # ... other methods (send_text, commit_audio, send_tool_result, etc.)
+```
+
+**Key observations**:
+- Adapter is ~80 lines, not 300+
+- All WebSocket complexity handled by infrastructure
+- Adapter focuses purely on OpenAI protocol translation
 
 ### 5.2 Translation Layer
 
@@ -781,10 +925,14 @@ def translate_event(raw: dict) -> VoiceEvent | None:
 
 | Component | Source | Target | Action |
 |-----------|--------|--------|--------|
-| WebSocketConnection | `connections/websocket_connection.py` | `adapters/realtime/openai/websocket.py` | Simplify |
+| WebSocketConnection | `connections/websocket_connection.py` | **Use `infrastructure/websocket/`** | **Don't port - use shared infra** |
 | MessageFactory | `core/message_protocol.py` | `adapters/realtime/openai/messages.py` | Keep |
 | Event types | `core/stream_protocol.py` | `ports/realtime.py` | Normalize |
 | SessionConfig | `session/session.py` | `ports/realtime.py` | Abstract |
+
+**Important**: WebSocket handling is now provided by the shared infrastructure. Adapters only need to:
+1. Configure `WebSocketClient` with appropriate URL/headers
+2. Translate messages to/from provider format
 
 ---
 
@@ -891,7 +1039,7 @@ async def test_barge_in():
 | **Name** | RealtimeVoiceAPIPort | Matches industry, covers voice+text |
 | **Event model** | Normalized VoiceEventType | Provider-agnostic for VoiceAgent |
 | **Config** | VoiceSessionConfig | Abstract from provider format |
-| **Transport** | Hidden in adapter | WebSocket is implementation detail |
+| **Transport** | Shared WebSocketClient | Reusable infrastructure with production features |
 | **Tool calling** | Explicit methods | Clear async flow |
 | **Errors** | Typed exceptions | Clear categorization |
 | **Testing** | MockRealtimeAdapter | No API needed for tests |
@@ -901,18 +1049,22 @@ async def test_barge_in():
 1. **Provider agnosticism**: Never expose OpenAI-specific types in port
 2. **Event normalization**: All events translated to VoiceEventType
 3. **Latency**: <10ms overhead for audio operations
-4. **Reconnection**: Automatic with configurable backoff
+4. **Reconnection**: Handled by WebSocketClient (exponential backoff + jitter)
 5. **Tool calling**: Async flow with explicit continuation
 6. **Thread safety**: Safe for concurrent send/receive
+7. **Infrastructure reuse**: Use shared WebSocketClient, don't reinvent
 
 ### What to Port from realtimevoiceapi
 
 | Keep | Discard |
 |------|---------|
-| WebSocketConnection (simplified) | FastLane/BigLane split |
-| MessageFactory | Complex EventBus |
-| Connection state machine | StreamOrchestrator |
-| Event type mappings | Cost tracking (for now) |
+| MessageFactory | WebSocketConnection (use shared infra) |
+| Event type mappings | FastLane/BigLane split (infra handles) |
+| Config translation | Complex EventBus |
+| Audio base64 handling | StreamOrchestrator |
+| | Cost tracking (for now) |
+
+**Note**: WebSocket concerns (reconnection, backpressure, metrics) are now handled by `infrastructure/websocket/WebSocketClient`. Adapters are much simpler.
 
 ---
 
@@ -920,6 +1072,9 @@ async def test_barge_in():
 
 | Document | Topic |
 |----------|-------|
+| `../websocket_infrastructure/what_we_are_building.md` | WebSocket infrastructure overview |
+| `../websocket_infrastructure/how_it_fits.md` | How WebSocket fits in hexagonal architecture |
+| `../websocket_infrastructure/step_by_step_implementation.md` | WebSocketClient implementation |
 | `how_audiostreamport_should_work_to_be_compatible_with_voxstream.md` | AudioStreamPort design |
 | `what_needs_to_port.md` | Full porting inventory |
 | `how_can_chatforge_should_implement_voice_connection.md` | Architecture overview |

@@ -62,6 +62,35 @@ from chatforge.ports.tts import (
     TTSInvalidInputError,
     TTSStreamingNotSupportedError,
 )
+from chatforge.ports.audio_stream import (
+    AudioStreamPort,
+    AudioStreamConfig,
+    VADConfig,
+    AudioCallbacks,
+    AudioDevice,
+    AudioStreamError,
+    AudioStreamDeviceError,
+    AudioStreamBufferError,
+    AudioStreamNotInitializedError,
+)
+from chatforge.ports.realtime_voice import (
+    # Exceptions
+    RealtimeError,
+    RealtimeConnectionError,
+    RealtimeAuthenticationError,
+    RealtimeRateLimitError,
+    RealtimeProviderError,
+    RealtimeSessionError,
+    # Enums
+    VoiceEventType,
+    # Data classes
+    VoiceEvent,
+    VoiceSessionConfig,
+    ToolDefinition,
+    ProviderCapabilities,
+    # Port
+    RealtimeVoiceAPIPort,
+)
 
 __all__ = [
     # Messaging Platform Integration
@@ -110,4 +139,27 @@ __all__ = [
     "TTSInvalidVoiceError",
     "TTSInvalidInputError",
     "TTSStreamingNotSupportedError",
+    # Audio Stream
+    "AudioStreamPort",
+    "AudioStreamConfig",
+    "VADConfig",
+    "AudioCallbacks",
+    "AudioDevice",
+    "AudioStreamError",
+    "AudioStreamDeviceError",
+    "AudioStreamBufferError",
+    "AudioStreamNotInitializedError",
+    # Realtime Voice
+    "RealtimeVoiceAPIPort",
+    "VoiceEvent",
+    "VoiceEventType",
+    "VoiceSessionConfig",
+    "ToolDefinition",
+    "ProviderCapabilities",
+    "RealtimeError",
+    "RealtimeConnectionError",
+    "RealtimeAuthenticationError",
+    "RealtimeRateLimitError",
+    "RealtimeProviderError",
+    "RealtimeSessionError",
 ]
