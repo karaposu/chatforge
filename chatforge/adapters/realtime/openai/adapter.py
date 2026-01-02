@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 # OpenAI Realtime API constants
 OPENAI_REALTIME_URL = "wss://api.openai.com/v1/realtime"
-DEFAULT_MODEL = "gpt-4o-realtime-preview-2024-12-17"
+DEFAULT_MODEL = "gpt-4o-realtime-preview-2025-06-03"
 
 # Sentinel value for stopping the event generator
 _STOP_SENTINEL = object()
@@ -362,7 +362,15 @@ class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
             supports_input_transcription=True,
             available_voices=["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
             available_models=[
+                # GA models
+                "gpt-realtime",
+                "gpt-realtime-2025-08-28",
+                # Mini (cost-efficient)
+                "gpt-realtime-mini",
+                "gpt-realtime-mini-2025-12-15",
+                # Preview
                 "gpt-4o-realtime-preview",
+                "gpt-4o-realtime-preview-2025-06-03",
                 "gpt-4o-realtime-preview-2024-12-17",
             ],
         )

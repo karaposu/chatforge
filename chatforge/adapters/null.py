@@ -8,6 +8,8 @@ Useful for:
 - Placeholder implementations
 """
 
+from typing import AsyncGenerator, Optional
+
 from chatforge.ports import (
     ActionData,
     ActionResult,
@@ -18,6 +20,10 @@ from chatforge.ports import (
     Message,
     MessagingPlatformIntegrationPort,
     TicketingPort,
+    AudioStreamPort,
+    AudioStreamConfig,
+    AudioDevice,
+    AudioCallbacks,
 )
 
 
@@ -101,3 +107,62 @@ class NullTicketingAdapter(TicketingPort):
     def update_status(self, action_id: str, status: str) -> bool:
         """Return True without updating status."""
         return True
+
+
+class NullAudioStreamAdapter(AudioStreamPort):
+    """
+    Null implementation of AudioStreamPort.
+
+    No-op audio adapter for testing without audio hardware.
+    Useful when audio features are disabled but code expects an adapter.
+    """
+
+    @property
+    def provider_name(self) -> str:
+        """Return provider identifier."""
+        return "null"
+
+    async def __aenter__(self) -> "NullAudioStreamAdapter":
+        """Enter async context (no-op)."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit async context (no-op)."""
+        pass
+
+    async def start_capture(self) -> AsyncGenerator[bytes, None]:
+        """Yield nothing - immediately returns."""
+        return
+        yield  # Make it a generator
+
+    async def stop_capture(self) -> None:
+        """No-op."""
+        pass
+
+    async def play(self, chunk: bytes) -> None:
+        """Discard audio."""
+        pass
+
+    async def end_playback(self) -> None:
+        """No-op."""
+        pass
+
+    async def stop_playback(self) -> None:
+        """No-op."""
+        pass
+
+    def set_callbacks(self, callbacks: AudioCallbacks) -> None:
+        """No-op - callbacks never fire."""
+        pass
+
+    def list_input_devices(self) -> list[AudioDevice]:
+        """Return empty list."""
+        return []
+
+    def set_input_device(self, device_id: Optional[int]) -> None:
+        """No-op."""
+        pass
+
+    def get_config(self) -> AudioStreamConfig:
+        """Return default config."""
+        return AudioStreamConfig()

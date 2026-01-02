@@ -8,6 +8,7 @@ from chatforge.adapters.null import (
     NullKnowledgeAdapter,
     NullMessagingAdapter,
     NullTicketingAdapter,
+    NullAudioStreamAdapter,
 )
 from chatforge.adapters.storage import (
     InMemoryStorageAdapter,
@@ -19,6 +20,7 @@ from chatforge.adapters.tts import (
     OpenAITTSAdapter,
     OpenAIVoiceConfig,
 )
+from chatforge.adapters.audio import VoxStreamAdapter, MockAudioStreamAdapter
 from chatforge.ports import NullTracingAdapter
 
 __all__ = [
@@ -30,9 +32,13 @@ __all__ = [
     "ElevenLabsVoiceConfig",
     "OpenAITTSAdapter",
     "OpenAIVoiceConfig",
+    # Audio
+    "VoxStreamAdapter",
+    "MockAudioStreamAdapter",
     # Null/Testing
     "NullMessagingAdapter",
     "NullKnowledgeAdapter",
     "NullTicketingAdapter",
     "NullTracingAdapter",
+    "NullAudioStreamAdapter",
 ]

@@ -13,13 +13,47 @@ How to switch ChamberProtocolAI's ElevenLabs TTS endpoint to use chatforge's TTS
 - `models/elevenlabs_response.py` - Response model
 
 **Issues:**
-- Sync `ElevenLabs` client in async context
+- **Sync `ElevenLabs` client in async context** - Uses blocking sync client in async FastAPI endpoints (should use `AsyncElevenLabs`)
 - String-based error handling
 - Separate utility file to maintain
+- Contains unnecessary v3 stability normalization code (see note below)
 
 ---
 
 ## New Implementation
+
+### Why This Matters: Async vs Sync Client
+
+**ChamberProtocolAI currently uses the sync client incorrectly:**
+
+```python
+# utils/elevenlabs_tts.py - WRONG APPROACH
+from elevenlabs import ElevenLabs  # ❌ Sync client
+
+eleven = ElevenLabs(api_key=api_key)
+
+# Called from async FastAPI endpoint - blocks the event loop!
+audio = eleven.text_to_speech.convert(...)  # ❌ No await, blocking call
+```
+
+**Chatforge uses the async client properly:**
+
+```python
+# chatforge/adapters/tts/elevenlabs.py - CORRECT APPROACH
+from elevenlabs import AsyncElevenLabs  # ✅ Async client
+
+self._client = AsyncElevenLabs(api_key=self._api_key)
+
+# Properly awaitable
+audio_stream = await self._client.text_to_speech.convert(...)  # ✅ Non-blocking
+```
+
+**Impact:**
+- Sync client blocks the entire FastAPI event loop
+- Other requests can't be processed while waiting for TTS
+- Async client allows FastAPI to handle multiple requests concurrently
+
+---
 
 ### Step 1: Install chatforge locally
 
@@ -30,6 +64,23 @@ pip install -e .
 
 ### Step 2: Replace elevenlabs_api.py
 
+**Before (ChamberProtocolAI - sync client):**
+```python
+# utils/elevenlabs_tts.py
+from elevenlabs import ElevenLabs  # ❌ Sync
+
+def generate_audio(text: str, voice_id: str, ...) -> bytes:
+    eleven = ElevenLabs(api_key=api_key)
+    audio = eleven.text_to_speech.convert(...)  # ❌ Blocks
+    return audio
+
+# apis/elevenlabs_api.py
+async def text_to_speech(request: ElevenLabsTTSRequest):
+    audio = generate_audio(...)  # ❌ Calling sync from async
+```
+
+**After (Chatforge - async client):**
+
 ```python
 from fastapi import APIRouter, HTTPException
 import base64
@@ -37,7 +88,7 @@ import base64
 from models.elevenlabs_request import ElevenLabsTTSRequest
 from models.elevenlabs_response import ElevenLabsTTSResponse
 
-from chatforge.services import TTSService
+from chatforge.services import TTSService  # ✅ Uses AsyncElevenLabs internally
 from chatforge.ports.tts import VoiceConfig
 from chatforge.ports.tts import (
     TTSRateLimitError,
@@ -69,8 +120,8 @@ async def text_to_speech(request: ElevenLabsTTSRequest):
     )
 
     try:
-        async with TTSService("elevenlabs") as tts:
-            result = await tts.generate(request.text, config, model=request.model_id)
+        async with TTSService("elevenlabs") as tts:  # ✅ Proper async context manager
+            result = await tts.generate(request.text, config, model=request.model_id)  # ✅ Properly awaited
 
         return ElevenLabsTTSResponse(
             audio_base64=base64.b64encode(result.audio_bytes).decode('utf-8'),
@@ -97,6 +148,7 @@ async def text_to_speech(request: ElevenLabsTTSRequest):
 ### Step 3: Delete utils/elevenlabs_tts.py
 
 No longer needed.
+
 
 ---
 
@@ -128,12 +180,14 @@ ChamberProtocolAI uses `mp3_44100_128` → `quality="standard"`
 
 ## What Changes
 
-| Aspect | Before | After |
-|--------|--------|-------|
-| Client | Sync `ElevenLabs` | Async `AsyncElevenLabs` |
-| Error handling | String matching | Typed exceptions |
+| Aspect | Before (ChamberProtocolAI) | After (Chatforge) |
+|--------|---------------------------|-------------------|
+| Client | Sync `ElevenLabs` (❌ blocks event loop) | Async `AsyncElevenLabs` (✅ non-blocking) |
+| API calls | `audio = client.convert(...)` (no await) | `audio = await client.convert(...)` (proper async) |
+| Error handling | String matching | Typed exceptions (`TTSRateLimitError`, etc.) |
 | Config | Dict + separate params | `VoiceConfig` dataclass |
 | Files | 2 (api + util) | 1 (api only) |
+| Stability normalization | Unnecessary snapping to 0.0/0.5/1.0 | Direct passthrough (correct) |
 
 ---
 
@@ -163,26 +217,20 @@ For stock voices like Silüet, ElevenLabs defaults work fine.
 
 ---
 
-## Testing
-
-```bash
-curl -X POST http://localhost:8188/elevenlabs/tts \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "Hello from Silüet, testing chatforge integration.",
-    "voice_id": "JBFqnCBsd6RMkjVDRZzb"
-  }'
-```
 
 ---
 
 ## Benefits
 
-1. **True async** - Native async with `AsyncElevenLabs`
-2. **Typed errors** - No string matching
-3. **Clean config** - Everything in `VoiceConfig`
-4. **Less code** - Delete utility file
-5. **Provider flexibility** - Can switch to OpenAI TTS easily
+1. **True async (CRITICAL)** - Uses `AsyncElevenLabs` properly with `await`, doesn't block FastAPI event loop
+   - Current code blocks all other requests while waiting for TTS
+   - Chatforge allows concurrent request handling
+2. **Typed errors** - No string matching, proper exception hierarchy
+3. **Clean config** - Everything in `VoiceConfig` dataclass
+4. **Less code** - Delete utility file (including unnecessary normalization code)
+5. **Provider flexibility** - Can switch to OpenAI TTS with one line change
+6. **Correct behavior** - No unnecessary stability value manipulation
+7. **Better maintainability** - One less file to maintain, cleaner architecture
 
 ---
 
@@ -190,6 +238,10 @@ curl -X POST http://localhost:8188/elevenlabs/tts \
 
 - [ ] Install chatforge: `pip install -e /path/to/chatforge`
 - [ ] Update `apis/elevenlabs_api.py`
-- [ ] Delete `utils/elevenlabs_tts.py`
-- [ ] Test endpoint
+- [ ] Delete `utils/elevenlabs_tts.py` (removes unnecessary normalization code)
+- [ ] Test endpoint with various stability values (0.0 to 1.0)
 - [ ] Test from Unity client
+
+---
+
+

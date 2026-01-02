@@ -48,6 +48,9 @@ class VoxStreamAdapter(AudioStreamPort):
         vad_config: Voice activity detection configuration
         mode: Processing mode ("realtime", "balanced", "quality")
         debug: Enable debug logging
+        pre_init_capture: If True, pre-initialize audio capture for near-instant
+                         start (~1-5ms instead of 100-400ms). Tradeoff: mic stays
+                         "hot" and uses some CPU when idle.
 
     Example:
         async with VoxStreamAdapter() as audio:
@@ -58,6 +61,11 @@ class VoxStreamAdapter(AudioStreamPort):
 
             async for chunk in audio.start_capture():
                 await process(chunk)
+
+        # With pre-initialization for instant capture start:
+        async with VoxStreamAdapter(pre_init_capture=True) as audio:
+            await audio.warm_capture()  # Pre-warm during setup
+            # Later calls to start_capture() are instant
     """
 
     def __init__(
@@ -66,11 +74,13 @@ class VoxStreamAdapter(AudioStreamPort):
         vad_config: Optional[VADConfig] = None,
         mode: str = "realtime",
         debug: bool = False,
+        pre_init_capture: bool = False,
     ):
         self._config = config or AudioStreamConfig()
         self._vad_config = vad_config or VADConfig()
         self._mode = mode
         self._debug = debug
+        self._pre_init_capture = pre_init_capture
 
         self._voxstream = None
         self._vad = None  # VADetector reference for callbacks
@@ -140,6 +150,13 @@ class VoxStreamAdapter(AudioStreamPort):
             AudioState.CAPTURING,
         )
 
+    @property
+    def is_capture_warm(self) -> bool:
+        """Check if capture stream is pre-initialized and ready for fast start."""
+        if self._voxstream:
+            return self._voxstream.is_capture_warm
+        return False
+
     # =========================================================================
     # Config Conversion
     # =========================================================================
@@ -174,6 +191,7 @@ class VoxStreamAdapter(AudioStreamPort):
         self._voxstream = VoxStream(
             mode=mode_map.get(self._mode, ProcessingMode.REALTIME),
             config=self._to_vox_stream_config(),
+            pre_init_capture=self._pre_init_capture,
         )
 
         # Configure VAD if enabled
@@ -275,6 +293,32 @@ class VoxStreamAdapter(AudioStreamPort):
     # =========================================================================
     # Capture
     # =========================================================================
+
+    async def warm_capture(self) -> None:
+        """
+        Pre-initialize audio capture for near-instant start.
+
+        Call this during idle moments (e.g., after playback ends) to pre-warm
+        the audio stream. Next call to start_capture() will start in ~1-5ms
+        instead of 100-400ms.
+
+        The stream stays "warm" (microphone active but data discarded) until
+        start_capture() is called.
+
+        Example:
+            # Manual warming
+            await audio.warm_capture()
+
+            # Auto-warm after playback (recommended for turn-based mode)
+            audio.set_callbacks(AudioCallbacks(
+                on_playback_complete=lambda: asyncio.create_task(audio.warm_capture())
+            ))
+        """
+        if not self._voxstream:
+            raise AudioStreamNotInitializedError(
+                "Adapter not initialized. Use 'async with' context."
+            )
+        await self._voxstream.warm_capture()
 
     async def start_capture(self) -> AsyncGenerator[bytes, None]:
         """Start capturing audio from microphone."""
@@ -400,7 +444,7 @@ class VoxStreamAdapter(AudioStreamPort):
 
     def set_input_device(self, device_id: Optional[int]) -> None:
         """Set the input device."""
-        if self._capturing:
+        if self._is_capture_active():
             raise RuntimeError("Cannot change device while capturing.")
         self._input_device = device_id
         if self._voxstream:
