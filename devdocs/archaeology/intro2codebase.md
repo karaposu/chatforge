@@ -1,350 +1,434 @@
-# Chatforge Codebase Introduction
+# Introduction to the Chatforge Codebase
 
-Welcome to Chatforge. This document will help you understand how the codebase is organized and how data flows through the system.
-
----
-
-## Architecture Style: Hexagonal (Ports & Adapters)
-
-Chatforge follows **Hexagonal Architecture**, also known as "Ports and Adapters." The core idea is simple:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        ADAPTERS                              │
-│  (concrete implementations: SQLite, OpenAI, Slack, etc.)    │
-│                                                              │
-│    ┌─────────────────────────────────────────────────┐      │
-│    │                    PORTS                         │      │
-│    │  (abstract interfaces: StoragePort, LLM, etc.)  │      │
-│    │                                                  │      │
-│    │    ┌─────────────────────────────────────┐      │      │
-│    │    │            CORE DOMAIN              │      │      │
-│    │    │   (ReActAgent, business logic)      │      │      │
-│    │    └─────────────────────────────────────┘      │      │
-│    │                                                  │      │
-│    └─────────────────────────────────────────────────┘      │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Why this matters:**
-- The core domain (agent logic) never imports concrete implementations
-- You can swap databases, AI providers, or platforms without touching core logic
-- Testing is easy: inject mock adapters instead of real ones
+Welcome to Chatforge! This document will help you understand how the codebase is designed - the patterns, abstractions, and how data flows through the system.
 
 ---
 
-## Directory Structure
+## The Core Design Philosophy
+
+Chatforge follows **Hexagonal Architecture** (also called "Ports and Adapters"). The key idea is simple:
+
+> **Your business logic should never know about the outside world.**
+
+The agent doesn't know if it's talking to SQLite or PostgreSQL. The voice system doesn't know if audio comes from a microphone or a WebRTC stream. Everything external is abstracted behind interfaces.
 
 ```
-chatforge/
-├── services/           # Core business logic (the "domain")
-│   ├── agent/          # ReACT agent engine
-│   ├── llm/            # LLM factory for multiple providers
-│   ├── vision/         # Image analysis service
-│   └── cleanup.py      # Background cleanup runners
-│
-├── ports/              # Abstract interfaces (the "contracts")
-│   ├── storage.py      # Conversation persistence
-│   ├── messaging_platform_integration.py  # Chat platforms
-│   ├── knowledge.py    # Knowledge base search
-│   ├── ticketing.py    # Ticket/task creation
-│   └── tracing.py      # Observability
-│
-├── adapters/           # Concrete implementations
-│   ├── storage/        # InMemory, SQLite, SQLAlchemy
-│   ├── fastapi/        # REST API routes
-│   └── null.py         # No-op adapters for testing
-│
-├── middleware/         # Security guardrails
-│   ├── pii.py          # PII detection/redaction
-│   ├── injection.py    # Prompt injection detection
-│   └── safety.py       # Response safety checks
-│
-├── config/             # Configuration management
-│   ├── llm.py          # LLM settings
-│   ├── agent.py        # Agent settings
-│   └── storage.py      # Storage settings
-│
-├── utils/              # Utilities
-│   └── async_bridge.py # Sync/async conversion
-│
-└── exceptions.py       # Exception hierarchy
+┌─────────────────────────────────────────────────────────────────┐
+│                        YOUR APPLICATION                          │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                      CORE DOMAIN                           │  │
+│  │     ReActAgent  •  LLM Factory  •  Business Logic          │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              │                                   │
+│                         PORTS (Interfaces)                       │
+│    ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐         │
+│    │ Storage  │ │ Realtime │ │   TTS    │ │ Messaging│         │
+│    │   Port   │ │Voice Port│ │   Port   │ │   Port   │   ...   │
+│    └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘         │
+│         │            │            │            │                 │
+│                         ADAPTERS (Implementations)               │
+│    ┌────┴─────┐ ┌────┴─────┐ ┌────┴─────┐ ┌────┴─────┐         │
+│    │ SQLite   │ │ OpenAI   │ │ElevenLabs│ │  Slack   │         │
+│    │ Adapter  │ │ Adapter  │ │ Adapter  │ │ Adapter  │   ...   │
+│    └──────────┘ └──────────┘ └──────────┘ └──────────┘         │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                    EXTERNAL SYSTEMS
+        (Databases, APIs, Hardware, Platforms)
 ```
-
----
-
-## Data Flow: Processing a Message
-
-Here's how a user message flows through the system:
-
-```
-┌──────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────┐
-│  User    │────▶│  Entry Point │────▶│  Middleware │────▶│  Agent   │
-│  Message │     │  (FastAPI)   │     │  (Security) │     │  Engine  │
-└──────────┘     └──────────────┘     └─────────────┘     └────┬─────┘
-                                                               │
-                 ┌─────────────────────────────────────────────┘
-                 │
-                 ▼
-    ┌────────────────────────────────────────────────────────────┐
-    │                     REACT LOOP                              │
-    │  ┌─────────┐    ┌─────────┐    ┌─────────┐                 │
-    │  │ REASON  │───▶│   ACT   │───▶│ OBSERVE │──┐              │
-    │  │ (LLM)   │    │ (Tools) │    │(Results)│  │              │
-    │  └─────────┘    └─────────┘    └─────────┘  │              │
-    │       ▲                                      │              │
-    │       └──────────────────────────────────────┘              │
-    │                    (repeat until done)                      │
-    └────────────────────────────────────────────────────────────┘
-                 │
-                 ▼
-    ┌────────────────────┐     ┌────────────────────┐
-    │  Safety Guardrail  │────▶│  Storage Adapter   │
-    │  (check response)  │     │  (save messages)   │
-    └────────────────────┘     └────────────────────┘
-                 │
-                 ▼
-           ┌──────────┐
-           │ Response │
-           │ to User  │
-           └──────────┘
-```
-
-### Step-by-Step Breakdown
-
-1. **Entry Point** (`adapters/fastapi/routes.py`)
-   - User sends POST to `/chat` with message
-   - Request is validated and session ID is assigned
-
-2. **Conversation History** (`ports/storage.py`)
-   - Previous messages are retrieved from storage
-   - Provides context for the AI
-
-3. **Middleware Pipeline** (`middleware/`)
-   - PII detection: scans for sensitive data
-   - Injection guard: blocks manipulation attempts
-   - (These run BEFORE the message reaches the agent)
-
-4. **Agent Processing** (`services/agent/engine.py`)
-   - Message + history sent to ReACT agent
-   - Agent enters reasoning loop (see below)
-
-5. **ReACT Loop**
-   - **Reason**: LLM decides what to do
-   - **Act**: Execute tools if needed
-   - **Observe**: Check results
-   - **Repeat** until task complete or max iterations
-
-6. **Response Safety** (`middleware/safety.py`)
-   - Agent response is checked for safety
-   - Unsafe responses are replaced with fallback
-
-7. **Persistence** (`adapters/storage/`)
-   - User message and agent response saved
-   - Conversation continues next time
-
-8. **Response Returned**
-   - JSON with response text and trace ID
 
 ---
 
 ## Main Abstractions
 
-### 1. Ports (Interfaces)
+### 1. Ports (The Contracts)
 
-Ports define **what** the system needs, not **how** it's implemented.
+**Location:** `chatforge/ports/`
+
+Ports are abstract interfaces that define *what* capabilities the system needs, without saying *how* they work. Each port is a Python ABC (Abstract Base Class).
 
 | Port | Purpose | Key Methods |
 |------|---------|-------------|
-| `StoragePort` | Save/retrieve conversations | `save_message()`, `get_conversation()` |
-| `MessagingPlatformIntegrationPort` | Talk to chat platforms | `send_message()`, `get_conversation_history()` |
-| `KnowledgePort` | Search knowledge bases | `search()`, `get_context_for_rag()` |
-| `TicketingPort` | Create tickets/tasks | `execute()`, `add_comment()` |
-| `TracingPort` | Observability/tracing | `span()`, `get_active_trace_id()` |
+| `StoragePort` | Conversation persistence | `save_message()`, `get_conversation()`, `cleanup_expired()` |
+| `RealtimeVoiceAPIPort` | Real-time AI voice | `connect()`, `send_audio()`, `events()`, `interrupt()` |
+| `AudioCapturePort` | Microphone input | `start_capture()`, `stop_capture()` |
+| `AudioPlaybackPort` | Speaker output | `play()`, `stop_playback()` |
+| `TTSPort` | Text-to-speech | `synthesize()`, `stream()` |
+| `VADPort` | Voice activity detection | `process_audio()`, `reset()` |
+| `MessagingPlatformIntegrationPort` | External chat platforms | `send_message()`, `get_conversation_history()` |
+| `KnowledgePort` | RAG/search | `search()` |
+| `TicketingPort` | Ticket systems | `create_ticket()`, `update_ticket()` |
+| `TracingPort` | Observability | `span()`, `set_trace_metadata()` |
 
-### 2. Adapters (Implementations)
+**Key Principle:** The core agent only imports from `ports/`. It never imports from `adapters/`.
 
-Adapters are **concrete implementations** of ports.
+### 2. Adapters (The Implementations)
 
-```python
-# Example: Storage has multiple adapters
-StoragePort (abstract)
-    ├── InMemoryStorageAdapter   # For development/testing
-    ├── SQLiteStorageAdapter     # Simple file-based
-    └── SQLAlchemyStorageAdapter # Any SQL database
+**Location:** `chatforge/adapters/`
+
+Adapters implement ports for specific technologies. You can swap adapters without changing application code.
+
+```
+StoragePort
+├── InMemoryStorageAdapter    # RAM-based, ephemeral
+├── SQLiteStorageAdapter      # File-based SQLite
+└── SQLAlchemyStorageAdapter  # Full ORM for production DBs
+
+RealtimeVoiceAPIPort
+├── OpenAIRealtimeAdapter     # OpenAI Realtime API
+└── MockRealtimeAdapter       # Testing without API calls
+
+AudioCapturePort
+├── SounddeviceAdapter        # Local microphone via sounddevice
+├── FileAdapter               # Read from audio file
+└── NullAdapter               # Testing (no-op)
 ```
 
-### 3. Services (Business Logic)
+**Null Adapters:** Every port has a "null" adapter for testing - it implements the interface but does nothing. This lets you test components in isolation.
 
-Services contain the core logic that uses ports.
+### 3. Services (The Business Logic)
 
-| Service | Location | Purpose |
-|---------|----------|---------|
-| `ReActAgent` | `services/agent/engine.py` | Main agent that processes messages |
-| `LLM Factory` | `services/llm/factory.py` | Creates LLM instances for any provider |
-| `ImageAnalyzer` | `services/vision/analyzer.py` | Analyzes images with vision LLMs |
-| `CleanupRunner` | `services/cleanup.py` | Background cleanup of old data |
+**Location:** `chatforge/services/`
 
-### 4. Middleware (Security Layer)
+Services contain the core logic that uses ports. They don't know *which* adapter is behind the port.
 
-Middleware intercepts requests/responses for security checks.
+| Service | Purpose |
+|---------|---------|
+| `ReActAgent` | The reasoning agent (think → act → observe loop) |
+| `LLM Factory` | Creates LLM instances for different providers |
+| `TTS Service` | High-level text-to-speech orchestration |
+| `Vision Analyzer` | Image analysis using vision models |
 
-| Middleware | Purpose |
-|------------|---------|
-| `PIIDetector` | Find/redact personal information |
-| `PromptInjectionGuard` | Block manipulation attempts |
-| `SafetyGuardrail` | Ensure responses are appropriate |
-| `ContentFilter` | Keyword-based blocking |
+### 4. Middleware (The Safety Layer)
+
+**Location:** `chatforge/middleware/`
+
+Middleware intercepts data before/after processing to enforce security:
+
+| Middleware | When | What |
+|------------|------|------|
+| `PIIDetector` | Before storage/send | Scans for emails, credit cards, SSNs, API keys |
+| `PromptInjectionGuard` | Before agent | Detects manipulation attempts |
+| `SafetyGuardrail` | After agent | Validates response safety |
+| `ContentFilter` | Either | Keyword/pattern blocking |
+
+### 5. Infrastructure (The Plumbing)
+
+**Location:** `chatforge/infrastructure/`
+
+Low-level building blocks used by adapters:
+
+| Component | Purpose |
+|-----------|---------|
+| `WebSocketClient` | Async WebSocket with reconnection, heartbeat, backpressure |
+| `ConnectionMetrics` | Track connection health and stats |
+| `ExponentialBackoff` | Retry policies for reconnection |
+
+### 6. Configuration (The Settings)
+
+**Location:** `chatforge/config/`
+
+Pydantic-based settings loaded from environment variables:
+
+| Config | Controls |
+|--------|----------|
+| `llm_config` | Provider, model, temperature, API keys |
+| `agent_config` | System prompt, timeouts |
+| `storage_config` | Database path, TTL |
+| `guardrails_config` | Enable/disable safety features |
+
+Each has both a class (`LLMSettings`) and a singleton instance (`llm_config`).
 
 ---
 
-## Key Design Patterns
+## Data Flow Paths
+
+### Flow 1: Text Chat Message
+
+```
+User Input
+    │
+    ▼
+┌─────────────────────┐
+│ Middleware Layer    │◄── PIIDetector scans input
+│ (Pre-processing)    │◄── PromptInjectionGuard checks
+└─────────────────────┘
+    │
+    ▼
+┌─────────────────────┐
+│ ReActAgent          │
+│  ┌───────────────┐  │
+│  │ 1. THINK      │  │◄── LLM decides what to do
+│  │ 2. ACT        │  │◄── Execute tools if needed
+│  │ 3. OBSERVE    │  │◄── See results
+│  │ 4. REPEAT     │  │◄── Until done
+│  └───────────────┘  │
+└─────────────────────┘
+    │
+    ▼
+┌─────────────────────┐
+│ Middleware Layer    │◄── SafetyGuardrail validates
+│ (Post-processing)   │
+└─────────────────────┘
+    │
+    ├──────────────────┐
+    ▼                  ▼
+Response          StoragePort
+to User           (save to DB)
+```
+
+**Key points:**
+- Agent uses `LLM Factory` to get the AI model
+- Tools are executed via `BaseTool` subclasses
+- Storage happens through `StoragePort` (SQLite, memory, etc.)
+
+### Flow 2: Voice Conversation
+
+```
+Microphone                                          Speaker
+    │                                                  ▲
+    ▼                                                  │
+┌──────────────────┐                      ┌──────────────────┐
+│ AudioCapturePort │                      │AudioPlaybackPort │
+│  (sounddevice)   │                      │  (sounddevice)   │
+└──────────────────┘                      └──────────────────┘
+    │                                                  ▲
+    ▼                                                  │
+┌──────────────────┐                      ┌──────────────────┐
+│ VADPort          │                      │ Audio Chunks     │
+│ (detect speech)  │                      │ from AI          │
+└──────────────────┘                      └──────────────────┘
+    │                                                  ▲
+    ▼                                                  │
+┌───────────────────────────────────────────────────────────────┐
+│                    RealtimeVoiceAPIPort                       │
+│                    (OpenAI Realtime API)                      │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐       │
+│  │ send_audio()│───▶│  WebSocket  │◀───│  events()   │       │
+│  └─────────────┘    │  Connection │    └─────────────┘       │
+│                     └─────────────┘                          │
+└───────────────────────────────────────────────────────────────┘
+```
+
+**Key points:**
+- Bidirectional: capture and playback happen concurrently
+- Server-side VAD: OpenAI detects when you start/stop speaking
+- Barge-in: User can interrupt AI mid-sentence via `interrupt()`
+- Events are streamed via async generator: `async for event in realtime.events()`
+
+### Flow 3: Tool Execution
+
+```
+Agent decides to use a tool
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────┐
+│                        AsyncAwareTool                        │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐      │
+│  │   _run()    │───▶│  async      │◀───│   _arun()   │      │
+│  │ (sync call) │    │  bridge     │    │ (async call)│      │
+│  └─────────────┘    └─────────────┘    └─────────────┘      │
+│                            │                                 │
+│                            ▼                                 │
+│                   _execute_async()                           │
+│              (your tool implementation)                      │
+└─────────────────────────────────────────────────────────────┘
+    │
+    ▼
+Tool interacts with external systems via Ports
+(TicketingPort, KnowledgePort, etc.)
+    │
+    ▼
+Result returned to Agent
+```
+
+**Key points:**
+- Tools inherit from `AsyncAwareTool` - you only write `_execute_async()`
+- The base class handles sync/async bridging automatically
+- Tools can use any port to interact with external systems
+
+---
+
+## Top-Level Design Patterns
 
 ### 1. Dependency Injection
 
-Components receive their dependencies, they don't create them.
+Components receive their dependencies, they don't create them:
 
 ```python
-# Good: Dependencies injected
+# ✅ Good - dependencies injected
 agent = ReActAgent(
     tools=[search_tool, ticket_tool],
-    llm=get_llm(provider="openai"),
     messaging_port=slack_adapter,
+    tracing=langfuse_adapter,
 )
 
-# Bad: Dependencies created internally (we don't do this)
+# ❌ Bad - hard-coded dependencies
 class Agent:
     def __init__(self):
-        self.llm = OpenAI()  # Hardcoded - can't swap
+        self.storage = SQLiteStorage("./db.sqlite")  # Locked in!
 ```
 
-### 2. Factory Pattern
+This enables testing (inject mocks) and flexibility (swap implementations).
 
-Factories create objects based on configuration.
+### 2. Async Context Managers
+
+Resources that need setup/cleanup use async context managers:
 
 ```python
-# LLM Factory - same interface, different providers
-llm = get_llm(provider="openai")    # Returns ChatOpenAI
-llm = get_llm(provider="anthropic") # Returns ChatAnthropic
-llm = get_llm(provider="bedrock")   # Returns BedrockChat
-
-# Router Factory - creates configured FastAPI router
-router = create_chat_router(
-    agent=agent,
-    storage=storage,
-    cleanup_runner=cleanup,
-)
+async with OpenAIRealtimeAdapter(api_key=key) as realtime:
+    await realtime.connect(config)
+    # ... use realtime ...
+# Automatically disconnected and cleaned up
 ```
 
-### 3. Strategy Pattern
+This pattern ensures resources are always properly released.
 
-Different strategies for handling the same task.
+### 3. Event-Driven Streaming
+
+Long-running operations emit events rather than returning all-at-once:
 
 ```python
-# PII handling strategies
-class PIIStrategy(Enum):
-    REDACT = "redact"   # Replace with [REDACTED]
-    MASK = "mask"       # Show partial: ****1234
-    HASH = "hash"       # Replace with hash
-    BLOCK = "block"     # Raise exception
+# Voice events
+async for event in realtime.events():
+    match event.type:
+        case VoiceEventType.AUDIO_CHUNK:
+            await speaker.play(event.data)
+        case VoiceEventType.TRANSCRIPT:
+            print(f"AI said: {event.data}")
+
+# Audio capture
+async for chunk in audio.start_capture():
+    await realtime.send_audio(chunk)
 ```
 
-### 4. Template Method Pattern
+This enables real-time processing without buffering entire streams.
 
-Base class defines algorithm, subclasses implement specifics.
+### 4. Configuration via Environment
 
-```python
-# AsyncAwareTool base class
-class AsyncAwareTool(BaseTool):
-    def _run(self, **kwargs):       # Template: handles sync
-        return run_async(self._execute_async(**kwargs))
-
-    async def _arun(self, **kwargs): # Template: handles async
-        return await self._execute_async(**kwargs)
-
-    @abstractmethod
-    async def _execute_async(self, **kwargs):  # Subclass implements
-        ...
-```
-
-### 5. Protocol-Based Design
-
-Uses Python protocols for loose coupling (duck typing with type hints).
+All settings come from environment variables with sensible defaults:
 
 ```python
-class CacheProtocol(Protocol):
-    def get(self, key: str) -> str | None: ...
-    def set(self, key: str, value: str) -> None: ...
+# In code
+llm_config.provider      # "openai" (default) or from LLM_PROVIDER
+llm_config.model_name    # from LLM_MODEL_NAME or default
+llm_config.openai_api_key # from OPENAI_API_KEY
 
-# Any class with get() and set() works - no inheritance needed
-```
-
----
-
-## Common Patterns You'll See
-
-### Async-First with Sync Bridge
-
-Most I/O is async, but sync wrappers exist for convenience.
-
-```python
-# Async method (preferred)
-result = await guard.check_message(text)
-
-# Sync wrapper (uses async bridge internally)
-result = guard.check_message_sync(text)
-```
-
-### Configuration via Environment
-
-Settings come from environment variables via Pydantic.
-
-```python
-# config/llm.py
+# Pydantic validates and provides type safety
 class LLMSettings(BaseSettings):
     provider: str = "openai"
     model_name: str = "gpt-4o-mini"
-    openai_api_key: str | None = None  # From OPENAI_API_KEY env var
 ```
 
-### Dataclasses for Data Transfer
+No config files to manage, easy deployment.
 
-Structured data uses dataclasses, not raw dicts.
+### 5. Normalized Events
+
+Different providers return different event formats. Adapters translate to normalized types:
 
 ```python
-@dataclass
-class MessageRecord:
-    content: str
-    role: str  # "user" | "assistant"
-    timestamp: datetime = field(default_factory=_utc_now)
+# OpenAI sends: {"type": "response.audio.delta", "delta": "base64..."}
+# Adapter translates to:
+VoiceEvent(
+    type=VoiceEventType.AUDIO_CHUNK,
+    data=decoded_bytes,
+    metadata={"response_id": "..."},
+)
+```
+
+Your code works with `VoiceEventType.AUDIO_CHUNK` regardless of provider.
+
+### 6. Fail-Safe Middleware
+
+Security middleware "fails open" rather than crashing:
+
+```python
+try:
+    result = await guard.check_message(msg)
+except Exception as e:
+    # Don't block the user if check fails
+    logger.error(f"Check failed: {e}")
+    return InjectionCheckResult(is_injection=False, ...)
+```
+
+This prevents security components from becoming availability risks.
+
+---
+
+## Directory Map
+
+```
+chatforge/
+├── __init__.py          # Public API exports
+├── ports/               # Abstract interfaces (contracts)
+│   ├── storage.py       # Conversation persistence
+│   ├── realtime_voice.py # Voice AI
+│   ├── audio_capture.py # Microphone input
+│   └── ...
+├── adapters/            # Concrete implementations
+│   ├── storage/         # SQLite, in-memory
+│   ├── realtime/        # OpenAI, mock
+│   ├── audio_capture/   # sounddevice, file, null
+│   └── ...
+├── services/            # Business logic
+│   ├── agent/           # ReActAgent
+│   ├── llm/             # LLM factory
+│   └── ...
+├── middleware/          # Security layer
+│   ├── pii.py           # PII detection
+│   ├── injection.py     # Prompt injection guard
+│   └── safety.py        # Content safety
+├── config/              # Settings
+│   ├── llm.py
+│   ├── agent.py
+│   └── ...
+├── infrastructure/      # Low-level components
+│   └── websocket/       # WebSocket client
+└── utils/               # Helpers
+    └── async_bridge.py  # Sync/async utilities
 ```
 
 ---
 
-## Where to Start
+## Quick Reference: Adding New Components
 
-1. **Understand the agent**: Start with `services/agent/engine.py` - this is the heart of the system
+### Adding a new Port:
+1. Create `chatforge/ports/my_thing.py`
+2. Define ABC with abstract methods
+3. Export in `chatforge/ports/__init__.py`
 
-2. **Trace a request**: Follow a message through `adapters/fastapi/routes.py` → agent → storage
+### Adding a new Adapter:
+1. Create `chatforge/adapters/my_thing/my_impl.py`
+2. Implement the port interface
+3. Export in `chatforge/adapters/__init__.py`
 
-3. **Read the ports**: `ports/` directory defines all the contracts
+### Adding a new Tool:
+1. Subclass `AsyncAwareTool`
+2. Define `name`, `description`, `args_schema`
+3. Implement `_execute_async()`
 
-4. **Study one adapter**: Pick `adapters/storage/memory.py` - it's the simplest implementation
-
-5. **Check middleware**: `middleware/pii.py` shows how security layers work
+### Adding new Middleware:
+1. Create `chatforge/middleware/my_check.py`
+2. Follow pattern: input → check → result dataclass
+3. Export in `chatforge/middleware/__init__.py`
 
 ---
 
-## Quick Reference: File Locations
+## Summary
 
-| When you need to... | Look at... |
-|---------------------|------------|
-| Understand agent logic | `services/agent/engine.py` |
-| Add a new tool | `services/agent/tools/base.py` |
-| Change LLM provider | `services/llm/factory.py` |
-| Add storage backend | `adapters/storage/` |
-| Add API endpoint | `adapters/fastapi/routes.py` |
-| Add security check | `middleware/` |
-| Define new interface | `ports/` |
-| Handle errors | `exceptions.py` |
+| Concept | What it does | Where to find it |
+|---------|--------------|------------------|
+| **Ports** | Define contracts (interfaces) | `chatforge/ports/` |
+| **Adapters** | Implement ports for specific tech | `chatforge/adapters/` |
+| **Services** | Business logic using ports | `chatforge/services/` |
+| **Middleware** | Security interception | `chatforge/middleware/` |
+| **Config** | Environment-based settings | `chatforge/config/` |
+| **Infrastructure** | Low-level building blocks | `chatforge/infrastructure/` |
+
+The architecture ensures:
+- **Testability**: Inject mocks for any external system
+- **Flexibility**: Swap providers without code changes
+- **Clarity**: Clear boundaries between layers
+- **Safety**: Security as a cross-cutting concern
+
+When in doubt, remember: **the core domain never imports from adapters**.

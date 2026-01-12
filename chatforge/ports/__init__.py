@@ -38,6 +38,9 @@ from chatforge.ports.storage import (
     ToolCallRecord,
     AgentRunRecord,
     TokenUsage,
+    # Profiling data extraction types
+    ProfilingDataExtractionRun,
+    ExtractedProfilingData,
     # Legacy aliases (for backward compatibility)
     ConversationRecord,
     ConversationMetadata,
@@ -91,6 +94,54 @@ from chatforge.ports.realtime_voice import (
     # Port
     RealtimeVoiceAPIPort,
 )
+from chatforge.ports.vad import (
+    # Exceptions
+    VADError,
+    VADConfigError,
+    # Enums
+    SpeechState,
+    # Data classes
+    VADConfig as VADPortConfig,  # Alias to avoid conflict with audio_stream.VADConfig
+    VADResult,
+    VADMetrics,
+    # Port
+    VADPort,
+)
+from chatforge.ports.audio_playback import (
+    # Exceptions
+    AudioPlaybackError,
+    DeviceNotFoundError,
+    DeviceInUseError,
+    PlaybackTimeoutError,
+    # Enums
+    PlaybackState,
+    # Data classes
+    AudioPlaybackConfig,
+    OutputDevice,
+    PlaybackMetrics,
+    # Protocols
+    DeviceEnumerable,
+    # Port
+    AudioPlaybackPort,
+)
+from chatforge.ports.audio_capture import (
+    # Exceptions
+    AudioCaptureError,
+    DeviceNotFoundError as CaptureDeviceNotFoundError,
+    DeviceInUseError as CaptureDeviceInUseError,
+    UnsupportedConfigError,
+    CaptureTimeoutError,
+    # Enums
+    CaptureState,
+    # Data classes
+    AudioCaptureConfig,
+    AudioDevice as CaptureAudioDevice,
+    CaptureMetrics,
+    # Protocols
+    DeviceEnumerable as CaptureDeviceEnumerable,
+    # Port
+    AudioCapturePort,
+)
 
 __all__ = [
     # Messaging Platform Integration
@@ -107,6 +158,9 @@ __all__ = [
     "ToolCallRecord",
     "AgentRunRecord",
     "TokenUsage",
+    # Profiling data extraction
+    "ProfilingDataExtractionRun",
+    "ExtractedProfilingData",
     # Legacy aliases
     "ConversationRecord",
     "ConversationMetadata",
@@ -162,4 +216,35 @@ __all__ = [
     "RealtimeRateLimitError",
     "RealtimeProviderError",
     "RealtimeSessionError",
+    # VAD
+    "VADPort",
+    "VADPortConfig",
+    "VADResult",
+    "VADMetrics",
+    "SpeechState",
+    "VADError",
+    "VADConfigError",
+    # Audio Playback
+    "AudioPlaybackPort",
+    "AudioPlaybackConfig",
+    "OutputDevice",
+    "PlaybackMetrics",
+    "PlaybackState",
+    "DeviceEnumerable",
+    "AudioPlaybackError",
+    "DeviceNotFoundError",
+    "DeviceInUseError",
+    "PlaybackTimeoutError",
+    # Audio Capture
+    "AudioCapturePort",
+    "AudioCaptureConfig",
+    "CaptureAudioDevice",
+    "CaptureMetrics",
+    "CaptureState",
+    "CaptureDeviceEnumerable",
+    "AudioCaptureError",
+    "CaptureDeviceNotFoundError",
+    "CaptureDeviceInUseError",
+    "UnsupportedConfigError",
+    "CaptureTimeoutError",
 ]

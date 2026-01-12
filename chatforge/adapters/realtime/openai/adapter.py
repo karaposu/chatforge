@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 from typing import AsyncGenerator
 
 from chatforge.infrastructure.websocket import (
@@ -44,6 +45,7 @@ _STOP_SENTINEL = object()
 _EVENT_QUEUE_MAX_SIZE = 1000
 
 
+@RealtimeVoiceAPIPort.register("openai")
 class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
     """
     OpenAI Realtime API adapter.
@@ -69,7 +71,7 @@ class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None = None,
         model: str = DEFAULT_MODEL,
         *,
         connect_timeout: float = 30.0,
@@ -81,14 +83,18 @@ class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
         Initialize OpenAI Realtime adapter.
 
         Args:
-            api_key: OpenAI API key
+            api_key: OpenAI API key (reads from OPENAI_API_KEY env var if not provided)
             model: Model to use (default: gpt-4o-realtime-preview)
             connect_timeout: Connection timeout in seconds
             auto_reconnect: Whether to auto-reconnect on disconnect
             max_reconnect_attempts: Max reconnect attempts
             enable_metrics: Whether to track connection metrics
         """
-        self._api_key = api_key
+        self._api_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not self._api_key:
+            raise ValueError(
+                "OpenAI API key not provided and OPENAI_API_KEY env var not set"
+            )
         self._model = model
         self._connect_timeout = connect_timeout
         self._auto_reconnect = auto_reconnect
@@ -105,6 +111,8 @@ class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
         self._receive_task: asyncio.Task | None = None
         # Lock for thread safety on shared state
         self._lock = asyncio.Lock()
+        # Track conversation item IDs for reset_conversation()
+        self._conversation_item_ids: list[str] = []
 
     # =========================================================================
     # Properties
@@ -134,6 +142,8 @@ class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
 
             self._config = config
             self._session_ready.clear()
+            # Clear any stale item tracking from previous session
+            self._conversation_item_ids.clear()
 
             # Resolve model
             model = self._model if config.model == "default" else config.model
@@ -217,6 +227,8 @@ class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
 
             self._config = None
             self._session_ready.clear()
+            # Clear item tracking
+            self._conversation_item_ids.clear()
 
             # Signal event generator to stop
             self._queue_event_nowait(_STOP_SENTINEL)
@@ -327,6 +339,43 @@ class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
             self._config = config
 
     # =========================================================================
+    # Conversation Management
+    # =========================================================================
+
+    async def reset_conversation(self) -> None:
+        """
+        Clear conversation history by deleting all tracked items.
+
+        After reset:
+        - Conversation history is empty
+        - System prompt remains active
+        - Tools remain configured
+        - Session stays connected
+        """
+        async with self._lock:
+            self._ensure_connected()
+
+            if not self._conversation_item_ids:
+                logger.debug("reset_conversation: no items to delete")
+                return
+
+            item_count = len(self._conversation_item_ids)
+            logger.info("Resetting conversation: deleting %d items", item_count)
+
+            # Delete all tracked items
+            for item_id in self._conversation_item_ids:
+                try:
+                    await self._ws.send_json(messages.conversation_item_delete(item_id))
+                except Exception as e:
+                    # Log but continue - item might already be deleted
+                    logger.warning("Failed to delete item %s: %s", item_id, e)
+
+            # Clear tracking regardless of delete success
+            self._conversation_item_ids.clear()
+
+            logger.debug("Conversation reset complete")
+
+    # =========================================================================
     # Event Stream
     # =========================================================================
 
@@ -360,7 +409,8 @@ class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
             supports_interruption=True,
             supports_transcription=True,
             supports_input_transcription=True,
-            available_voices=["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
+            supports_conversation_reset=True,
+            available_voices=["sage", "shimmer", "ash", "alloy", "coral", "echo", "ballad", "verse"],
             available_models=[
                 # GA models
                 "gpt-realtime",
@@ -411,12 +461,36 @@ class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
             if event is not _STOP_SENTINEL and isinstance(event, VoiceEvent):
                 logger.warning("Event queue full, dropping event: %s", event.type)
 
+    def _track_conversation_item(self, raw_event: dict) -> None:
+        """
+        Track conversation item ID if this is a creation event.
+
+        Called during raw event processing, before translation.
+        """
+        if raw_event.get("type") != "conversation.item.created":
+            return
+
+        item = raw_event.get("item", {})
+        item_id = item.get("id")
+
+        if item_id and item_id not in self._conversation_item_ids:
+            self._conversation_item_ids.append(item_id)
+            logger.debug(
+                "Tracked conversation item: %s (total: %d)",
+                item_id,
+                len(self._conversation_item_ids),
+            )
+
     async def _receive_loop(self) -> None:
         """Background task to receive and translate events."""
         try:
             async for msg in self._ws.messages():
                 try:
                     raw = json.loads(msg.as_text())
+
+                    # Track conversation items before translation
+                    self._track_conversation_item(raw)
+
                     event = translate_event(raw)
 
                     if event:

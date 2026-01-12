@@ -1,10 +1,12 @@
 """OpenAI Realtime API message factory."""
 
 import base64
+import logging
 from typing import Any
 
 from chatforge.ports.realtime_voice import VoiceSessionConfig, ToolDefinition
 
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Client → Server Messages
@@ -25,6 +27,9 @@ def session_update(config: VoiceSessionConfig) -> dict:
     # Instructions
     if config.system_prompt:
         session["instructions"] = config.system_prompt
+        logger.info(f"[DEBUG] session_update: instructions set, length={len(config.system_prompt)}")
+    else:
+        logger.warning("[DEBUG] session_update: NO system_prompt provided!")
 
     # Max tokens
     if config.max_tokens:
@@ -132,6 +137,14 @@ def response_cancel(response_id: str | None = None) -> dict:
     if response_id:
         msg["response_id"] = response_id
     return msg
+
+
+def conversation_item_delete(item_id: str) -> dict:
+    """Create conversation.item.delete message."""
+    return {
+        "type": "conversation.item.delete",
+        "item_id": item_id,
+    }
 
 
 # =============================================================================

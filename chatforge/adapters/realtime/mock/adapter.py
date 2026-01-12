@@ -17,6 +17,7 @@ from chatforge.ports.realtime_voice import (
 _STOP_SENTINEL = object()
 
 
+@RealtimeVoiceAPIPort.register("mock")
 class MockRealtimeAdapter(RealtimeVoiceAPIPort):
     """
     Mock RealtimeVoiceAPIPort for testing.
@@ -62,7 +63,10 @@ class MockRealtimeAdapter(RealtimeVoiceAPIPort):
         self.committed_count: int = 0
         self.cleared_count: int = 0
         self.interrupt_count: int = 0
+        self.reset_count: int = 0
         self.response_requests: list[str | None] = []
+        # Track conversation item IDs (for testing)
+        self._conversation_item_ids: list[str] = []
 
     # =========================================================================
     # Properties
@@ -156,6 +160,16 @@ class MockRealtimeAdapter(RealtimeVoiceAPIPort):
         await self.interrupt()
 
     # =========================================================================
+    # Conversation Management
+    # =========================================================================
+
+    async def reset_conversation(self) -> None:
+        """Mock implementation - just clear tracking and increment counter."""
+        self._ensure_connected()
+        self.reset_count += 1
+        self._conversation_item_ids.clear()
+
+    # =========================================================================
     # Tool Calling
     # =========================================================================
 
@@ -205,6 +219,7 @@ class MockRealtimeAdapter(RealtimeVoiceAPIPort):
             supports_interruption=True,
             supports_transcription=True,
             supports_input_transcription=True,
+            supports_conversation_reset=True,
             available_voices=["mock_voice"],
             available_models=["mock_model"],
         )
@@ -285,10 +300,23 @@ class MockRealtimeAdapter(RealtimeVoiceAPIPort):
         self.committed_count = 0
         self.cleared_count = 0
         self.interrupt_count = 0
+        self.reset_count = 0
         self.response_requests = []
+        self._conversation_item_ids = []
         # Clear the queue
         while not self._event_queue.empty():
             try:
                 self._event_queue.get_nowait()
             except asyncio.QueueEmpty:
                 break
+
+    async def queue_conversation_item(self, item_id: str) -> None:
+        """Queue a conversation item created event (simulates item tracking)."""
+        self._conversation_item_ids.append(item_id)
+        await self._event_queue.put(
+            VoiceEvent(
+                type=VoiceEventType.CONVERSATION_ITEM,
+                data={"id": item_id, "type": "message"},
+                metadata={"item_id": item_id},
+            )
+        )

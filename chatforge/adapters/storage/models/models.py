@@ -538,3 +538,143 @@ class AgentRun(Base):
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "metadata": self.metadata_,
         }
+
+
+class ProfilingDataExtractionRun(Base):
+    """
+    Profiling data extraction run.
+
+    Tracks each run of the extraction service, including scope,
+    status, and metrics.
+
+    Attributes:
+        id: Primary key
+        user_id: User being profiled
+        chat_id: Which chat (NULL = all user's chats)
+        status: 'pending', 'running', 'completed', 'failed'
+        error: Error message if failed
+        config: Extraction configuration (dimensions, thresholds)
+        model_used: LLM model used for extraction
+        message_count: Total messages processed
+        message_id_range: Range of message IDs processed
+        duration_ms: Extraction duration in milliseconds
+        started_at: When extraction started
+        completed_at: When extraction finished
+        created_at: When record was created
+    """
+
+    __tablename__ = "profiling_data_extraction_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(255), nullable=False)
+    chat_id = Column(Integer, ForeignKey("chats.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String(20), default="pending", nullable=False)
+    error = Column(Text, nullable=True)
+    config = Column(JSON, default=dict, nullable=False)
+    model_used = Column(String(100), nullable=True)
+    message_count = Column(Integer, default=0, nullable=False)
+    message_id_range = Column(JSON, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=_utc_now, nullable=False)
+
+    # Relationships
+    chat = relationship("Chat")
+    extracted_data = relationship(
+        "ExtractedProfilingData",
+        back_populates="extraction_run",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("idx_pde_runs_user_id", "user_id"),
+        Index("idx_pde_runs_chat_id", "chat_id"),
+        Index("idx_pde_runs_status", "status"),
+        Index("idx_pde_runs_created_at", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ProfilingDataExtractionRun id={self.id} user_id={self.user_id} status={self.status}>"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "chat_id": self.chat_id,
+            "status": self.status,
+            "error": self.error,
+            "config": self.config,
+            "model_used": self.model_used,
+            "message_count": self.message_count,
+            "message_id_range": self.message_id_range,
+            "duration_ms": self.duration_ms,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ExtractedProfilingData(Base):
+    """
+    Extracted profiling data with full traceability.
+
+    Each record represents a piece of profiling data extracted from
+    user messages, with links back to source messages and quotes.
+
+    The `data` field is format-agnostic - stores CPF-7 dimensions,
+    confidence scores, etc. as JSON.
+
+    Attributes:
+        id: Primary key
+        extraction_run_id: Which run produced this
+        user_id: User this data is about
+        chat_id: Which chat this came from
+        source_message_ids: Message IDs this was extracted from
+        source_quotes: Exact quotes from messages
+        data: Extracted profiling data (format-agnostic JSON)
+        created_at: When extracted
+    """
+
+    __tablename__ = "extracted_profiling_data"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    extraction_run_id = Column(
+        Integer,
+        ForeignKey("profiling_data_extraction_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id = Column(String(255), nullable=False)
+    chat_id = Column(Integer, ForeignKey("chats.id", ondelete="SET NULL"), nullable=True)
+    source_message_ids = Column(JSON, default=list, nullable=False)
+    source_quotes = Column(JSON, default=list, nullable=False)
+    data = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=_utc_now, nullable=False)
+
+    # Relationships
+    extraction_run = relationship("ProfilingDataExtractionRun", back_populates="extracted_data")
+    chat = relationship("Chat")
+
+    __table_args__ = (
+        Index("idx_profiling_data_user_id", "user_id"),
+        Index("idx_profiling_data_chat_id", "chat_id"),
+        Index("idx_profiling_data_run_id", "extraction_run_id"),
+        Index("idx_profiling_data_created_at", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ExtractedProfilingData id={self.id} user_id={self.user_id}>"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "id": self.id,
+            "extraction_run_id": self.extraction_run_id,
+            "user_id": self.user_id,
+            "chat_id": self.chat_id,
+            "source_message_ids": self.source_message_ids,
+            "source_quotes": self.source_quotes,
+            "data": self.data,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }

@@ -24,8 +24,10 @@ from chatforge.adapters.storage.models.models import (
     Attachment,
     Base,
     Chat,
+    ExtractedProfilingData,
     Message,
     Participant,
+    ProfilingDataExtractionRun,
     ToolCall,
 )
 
@@ -38,4 +40,7 @@ __all__ = [
     "Attachment",
     "ToolCall",
     "AgentRun",
+    # Profiling data extraction models
+    "ProfilingDataExtractionRun",
+    "ExtractedProfilingData",
 ]

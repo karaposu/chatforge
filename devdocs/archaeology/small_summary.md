@@ -1,146 +1,135 @@
-# Chatforge: A Plain English Summary
+# Chatforge - Project Summary
 
-## What Is This Project?
+## What is Chatforge?
 
-Chatforge is a **toolkit for building AI chat assistants**. Think of it like a construction kit that lets you build smart chatbots that can:
+Chatforge is a toolkit for building AI-powered chatbots and voice assistants. Think of it as a construction kit that lets developers create smart assistants that can:
 
-- Have conversations with people
-- Answer questions
-- Perform tasks using "tools" (like searching a knowledge base or creating tickets)
-- Work on different messaging platforms (Slack, Microsoft Teams, Discord, etc.)
+- **Have conversations** - Remember what you said and respond intelligently
+- **Talk and listen** - Support real-time voice conversations (like talking to Siri or Alexa)
+- **Use tools** - Look things up, create tickets, search databases, and take actions
+- **Stay safe** - Block harmful requests and protect private information
 
-The project is currently in active development - some parts work, others are still being built.
+## The Big Picture
 
----
+Imagine you're building a customer support chatbot. You need:
 
-## The Big Idea: "Build Once, Run Anywhere"
+1. A brain (the AI that understands and responds)
+2. A memory (to remember the conversation)
+3. Hands (tools to actually do things like create tickets)
+4. Ears and mouth (for voice conversations)
+5. Security guards (to block bad actors)
 
-The most important concept in Chatforge is **separation of concerns**. Instead of building a chatbot that only works with one specific AI service, one specific database, and one specific messaging platform, Chatforge separates these pieces:
+Chatforge provides all of these as separate, swappable pieces. You can mix and match based on what you need.
 
-1. **The Brain**: The core chatbot logic that decides what to do
-2. **The AI Provider**: Which AI service powers the thinking (OpenAI, Anthropic Claude, or Amazon Bedrock)
-3. **The Memory**: Where conversations are stored (in-memory, SQLite file, PostgreSQL database, etc.)
-4. **The Platform**: Where the chatbot lives (Slack, Teams, a website, an API, etc.)
+## Core Capabilities
 
-This means you can swap out any piece without rewriting everything else. Want to switch from OpenAI to Anthropic? Change one setting. Want to move from a simple file database to PostgreSQL? Change one adapter.
+### 1. Intelligent Conversations
 
----
+The heart of Chatforge is an "agent" - an AI that thinks before it acts. When you ask it something:
 
-## What Can Chatforge Do?
+1. It **thinks** about what you want
+2. It **decides** if it needs to use any tools
+3. It **acts** by using those tools or responding directly
+4. It **observes** the results
+5. It **repeats** until your question is fully answered
 
-### 1. Hold Intelligent Conversations
+This is like how a helpful assistant would work - not just answering blindly, but actually reasoning about what you need.
 
-The chatbot uses a pattern called **ReACT** (Reason, Act, Observe):
-- **Reason**: Think about what the user wants
-- **Act**: Take action (like searching for information or creating a ticket)
-- **Observe**: Look at the results
-- **Repeat** until the task is done
+### 2. Voice Conversations
 
-This makes the chatbot smarter than simple keyword matching - it actually thinks through problems.
+Chatforge supports real-time voice interactions using OpenAI's voice AI:
 
-### 2. Use Tools
+- You can speak naturally and get spoken responses
+- The AI knows when you start and stop talking
+- You can interrupt the AI mid-sentence ("barge-in")
+- It transcribes what both you and the AI say
 
-Chatbots built with Chatforge can use "tools" to do things:
-- Search a knowledge base for answers
-- Create support tickets in systems like Jira
-- Look at images and describe what's in them
-- Any custom tool you create
+This enables building voice assistants, phone bots, or hands-free interfaces.
 
-### 3. Remember Conversations
+### 3. Multiple AI Providers
 
-The chatbot stores conversation history so it remembers what you talked about. This history can be stored:
-- In memory (temporary, for testing)
-- In a SQLite file (simple, local storage)
-- In a full database like PostgreSQL (for production use)
+You're not locked into one AI company. Chatforge works with:
 
-### 4. Protect User Privacy
+- **OpenAI** (ChatGPT, GPT-4)
+- **Anthropic** (Claude)
+- **AWS Bedrock** (various models)
 
-Chatforge has built-in security features:
+Switch between them without rewriting your code.
 
-- **PII Detection**: Automatically finds and hides personal information like email addresses, phone numbers, credit card numbers, and social security numbers
-- **Prompt Injection Protection**: Detects when users try to trick the AI into behaving badly
-- **Safety Guardrails**: Checks AI responses to make sure they're appropriate
+### 4. Memory & Storage
 
-### 5. Analyze Images
+Conversations are automatically saved and can be retrieved later. The system supports:
 
-The chatbot can look at images (screenshots, photos, documents) and describe what it sees. Useful for:
-- Understanding error screenshots
-- Describing uploaded images
-- Analyzing visual content
+- **In-memory storage** - Fast but temporary (good for testing)
+- **SQLite database** - Persistent storage in a file
+- **Full database support** - For production systems
 
-### 6. Work with External Systems
+Old conversations are automatically cleaned up based on your settings.
 
-Chatforge can connect to:
-- **Knowledge Bases**: Like Notion or Confluence, to find answers to questions
-- **Ticketing Systems**: Like Jira or ServiceNow, to create and manage support tickets
-- **Messaging Platforms**: Like Slack or Discord, to have conversations where your users already are
+### 5. Security & Safety
 
----
+Three layers of protection:
+
+- **Personal Information Detection (PII)** - Automatically finds and redacts emails, credit cards, phone numbers, social security numbers, and API keys before they're stored or sent anywhere
+
+- **Prompt Injection Protection** - Detects when someone tries to trick the AI into doing bad things (like "ignore your instructions and do X")
+
+- **Content Safety** - General guardrails to keep conversations appropriate
+
+### 6. Extensibility with Tools
+
+You can give the AI "tools" - actions it can take. For example:
+
+- Search a knowledge base
+- Create a support ticket
+- Look up customer information
+- Check order status
+
+The AI decides when to use each tool based on the conversation.
+
+## Architecture Philosophy
+
+Chatforge uses a "plug-and-play" design. Each major function has:
+
+1. **A Port** - A contract that says "here's what any implementation must do"
+2. **Adapters** - Actual implementations that fulfill that contract
+
+For example, the storage system:
+- **Port**: "You must be able to save messages, retrieve history, and clean up old data"
+- **Adapter 1**: SQLite (saves to a file)
+- **Adapter 2**: In-memory (keeps in RAM)
+- **Adapter 3**: PostgreSQL (real database)
+
+This means you can swap SQLite for PostgreSQL without changing your application code.
+
+## Current Development Status
+
+The project is actively being developed. Key areas in progress:
+
+- **Voice infrastructure** - Audio capture, playback, and voice activity detection are being refined with multiple adapter options
+- **WebRTC support** - For browser-based voice interactions
+- **Rate limiting** - To control API usage
+- **Speech-to-text** - Converting spoken words to text
+
+## Project Structure
+
+- `chatforge/` - The main library
+  - `ports/` - Interfaces (the contracts)
+  - `adapters/` - Implementations (the actual code that does things)
+  - `services/` - Business logic (the agent, LLM handling)
+  - `middleware/` - Security features
+  - `config/` - Settings management
+
+- `chatterm/` - A terminal-based chat interface for testing
+- `examples/` - Working examples you can run
+- `tests/` - Automated tests
 
 ## Who Would Use This?
 
-Chatforge is designed for teams building:
+- **Developers building chatbots** - Customer support, internal tools, virtual assistants
+- **Teams needing voice AI** - Call centers, voice interfaces, accessibility features
+- **Organizations wanting control** - Those who need to swap providers, add security, or customize behavior
 
-- **Customer support bots** that can answer questions and create tickets
-- **Internal IT help desks** that assist employees
-- **Knowledge assistants** that help people find information
-- **Any AI-powered chat application** that needs to be reliable and flexible
+## Summary
 
----
-
-## The Building Blocks
-
-### Ports (The Interfaces)
-
-Think of ports as "socket shapes" - they define what a connection should look like:
-- **Storage Port**: How to save and retrieve conversations
-- **Messaging Port**: How to talk to chat platforms
-- **Knowledge Port**: How to search for information
-- **Ticketing Port**: How to create and manage tickets
-
-### Adapters (The Implementations)
-
-Adapters are the actual plugs that fit into the ports:
-- **In-Memory Adapter**: Stores conversations in computer memory (temporary)
-- **SQLite Adapter**: Stores conversations in a file
-- **SQLAlchemy Adapter**: Stores conversations in any database
-
-### Services (The Workers)
-
-Services do the actual work:
-- **Agent Service**: The brain that processes messages and decides what to do
-- **LLM Service**: Connects to AI providers (OpenAI, Anthropic, Bedrock)
-- **Vision Service**: Analyzes images
-- **Cleanup Service**: Removes old data to save space
-
-### Middleware (The Security Guards)
-
-Middleware sits between the user and the AI, checking everything:
-- **PII Detector**: Finds and hides personal information
-- **Injection Guard**: Blocks attempts to manipulate the AI
-- **Safety Guardrail**: Ensures responses are appropriate
-
----
-
-## Current State
-
-The project is under heavy development. Based on the code:
-
-- Core agent functionality works
-- Multiple storage options are implemented
-- Security middleware is in place
-- FastAPI REST endpoints are ready
-- Vision/image analysis is functional
-- The framework is designed for extensibility
-
-What's likely still in progress:
-- Real-time streaming responses (partially implemented)
-- Platform-specific adapters (Slack, Teams, Discord)
-- Knowledge base and ticketing integrations (interfaces exist, implementations may vary)
-- Production hardening and testing
-
----
-
-## In One Sentence
-
-Chatforge is a modular toolkit for building AI chat assistants that can be deployed anywhere, connect to any AI provider, store data in any database, and includes security features out of the box.
+Chatforge is a flexible, secure, and extensible framework for building conversational AI applications. It handles the complex plumbing (AI integration, storage, security, voice) so developers can focus on building features their users actually need.

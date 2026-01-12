@@ -31,13 +31,25 @@ from sqlalchemy import and_, func
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from chatforge.adapters.storage.models.models import Base, Chat, Participant, Message, Attachment, ToolCall, AgentRun
+from chatforge.adapters.storage.models.models import (
+    AgentRun,
+    Attachment,
+    Base,
+    Chat,
+    ExtractedProfilingData,
+    Message,
+    Participant,
+    ProfilingDataExtractionRun,
+    ToolCall,
+)
 from chatforge.ports.storage_types import (
     AgentRunRecord,
     AttachmentRecord,
     ChatRecord,
+    ExtractedProfilingData as ExtractedProfilingDataRecord,
     MessageRecord,
     ParticipantRecord,
+    ProfilingDataExtractionRun as ProfilingDataExtractionRunRecord,
     ToolCallRecord,
 )
 from chatforge.ports.storage import StoragePort
@@ -639,6 +651,163 @@ class SQLAlchemyStorageAdapter(StoragePort):
             return [self._agent_run_to_record(r) for r in runs]
 
     # =========================================================================
+    # Profiling Data Extraction Operations (Extended Interface)
+    # =========================================================================
+
+    async def create_extraction_run(
+        self,
+        run: ProfilingDataExtractionRunRecord,
+    ) -> ProfilingDataExtractionRunRecord:
+        """Create a new extraction run record."""
+        with self._session_factory() as session:
+            db_run = ProfilingDataExtractionRun(
+                user_id=run.user_id,
+                chat_id=run.chat_id,
+                status=run.status,
+                error=run.error,
+                config=run.config,
+                model_used=run.model_used,
+                message_count=run.message_count,
+                message_id_range=run.message_id_range,
+                duration_ms=run.duration_ms,
+                started_at=run.started_at,
+                completed_at=run.completed_at,
+            )
+            session.add(db_run)
+            session.commit()
+            session.refresh(db_run)
+
+            return self._extraction_run_to_record(db_run)
+
+    async def update_extraction_run(
+        self,
+        run_id: int | str,
+        updates: dict[str, Any],
+    ) -> ProfilingDataExtractionRunRecord:
+        """Update extraction run status/metrics."""
+        with self._session_factory() as session:
+            db_run = session.query(ProfilingDataExtractionRun).filter(
+                ProfilingDataExtractionRun.id == run_id
+            ).first()
+
+            if not db_run:
+                raise ValueError(f"Extraction run {run_id} not found")
+
+            # Apply updates
+            allowed_fields = {
+                "status", "error", "model_used", "message_count",
+                "message_id_range", "duration_ms", "started_at", "completed_at",
+            }
+            for key, value in updates.items():
+                if key in allowed_fields:
+                    setattr(db_run, key, value)
+
+            session.commit()
+            session.refresh(db_run)
+
+            return self._extraction_run_to_record(db_run)
+
+    async def get_extraction_run(
+        self,
+        run_id: int | str,
+    ) -> ProfilingDataExtractionRunRecord | None:
+        """Get extraction run by ID."""
+        with self._session_factory() as session:
+            db_run = session.query(ProfilingDataExtractionRun).filter(
+                ProfilingDataExtractionRun.id == run_id
+            ).first()
+
+            if not db_run:
+                return None
+
+            return self._extraction_run_to_record(db_run)
+
+    async def save_extracted_profiling_data(
+        self,
+        data: list[ExtractedProfilingDataRecord],
+    ) -> list[ExtractedProfilingDataRecord]:
+        """Save batch of extracted profiling data."""
+        with self._session_factory() as session:
+            results = []
+            for item in data:
+                db_item = ExtractedProfilingData(
+                    extraction_run_id=item.extraction_run_id,
+                    user_id=item.user_id,
+                    chat_id=item.chat_id,
+                    source_message_ids=item.source_message_ids,
+                    source_quotes=item.source_quotes,
+                    data=item.data,
+                )
+                session.add(db_item)
+                session.flush()  # Get ID without committing
+                results.append(db_item)
+
+            session.commit()
+
+            # Refresh all to get final state
+            for item in results:
+                session.refresh(item)
+
+            return [self._extracted_data_to_record(item) for item in results]
+
+    async def get_extracted_profiling_data(
+        self,
+        user_id: str,
+        chat_id: int | str | None = None,
+        limit: int = 100,
+    ) -> list[ExtractedProfilingDataRecord]:
+        """Get extracted profiling data for user, optionally filtered by chat."""
+        with self._session_factory() as session:
+            query = session.query(ExtractedProfilingData).filter(
+                ExtractedProfilingData.user_id == user_id
+            )
+
+            if chat_id is not None:
+                query = query.filter(ExtractedProfilingData.chat_id == chat_id)
+
+            items = query.order_by(
+                ExtractedProfilingData.created_at.desc()
+            ).limit(limit).all()
+
+            return [self._extracted_data_to_record(item) for item in items]
+
+    async def get_messages_for_extraction(
+        self,
+        user_id: str,
+        chat_id: int | str | None = None,
+        since_message_id: int | str | None = None,
+        limit: int = 100,
+    ) -> list[MessageRecord]:
+        """Get user's messages for extraction processing.
+
+        Finds messages by looking up chats where user is a participant.
+        """
+        with self._session_factory() as session:
+            # Build base query joining messages to chats where user participates
+            query = session.query(Message).join(
+                Chat, Message.chat_id == Chat.id
+            ).join(
+                Participant, Participant.chat_id == Chat.id
+            ).filter(
+                Participant.external_id == user_id,
+                Participant.left_at.is_(None),
+                Chat.deleted_at.is_(None),
+                Message.deleted_at.is_(None),
+            )
+
+            # Filter by specific chat if provided
+            if chat_id is not None:
+                query = query.filter(Message.chat_id == chat_id)
+
+            # For incremental extraction - get messages after a specific ID
+            if since_message_id is not None:
+                query = query.filter(Message.id > since_message_id)
+
+            messages = query.order_by(Message.id.asc()).limit(limit).all()
+
+            return [self._message_to_record(m) for m in messages]
+
+    # =========================================================================
     # Cleanup Operations
     # =========================================================================
 
@@ -853,4 +1022,39 @@ class SQLAlchemyStorageAdapter(StoragePort):
             started_at=run.started_at,
             completed_at=run.completed_at,
             metadata=run.metadata_ or {},
+        )
+
+    def _extraction_run_to_record(
+        self, run: ProfilingDataExtractionRun
+    ) -> ProfilingDataExtractionRunRecord:
+        """Convert ProfilingDataExtractionRun model to dataclass."""
+        return ProfilingDataExtractionRunRecord(
+            id=run.id,
+            user_id=run.user_id,
+            chat_id=run.chat_id,
+            status=run.status,
+            error=run.error,
+            config=run.config or {},
+            model_used=run.model_used,
+            message_count=run.message_count,
+            message_id_range=run.message_id_range,
+            duration_ms=run.duration_ms,
+            started_at=run.started_at,
+            completed_at=run.completed_at,
+            created_at=run.created_at,
+        )
+
+    def _extracted_data_to_record(
+        self, item: ExtractedProfilingData
+    ) -> ExtractedProfilingDataRecord:
+        """Convert ExtractedProfilingData model to dataclass."""
+        return ExtractedProfilingDataRecord(
+            id=item.id,
+            extraction_run_id=item.extraction_run_id,
+            user_id=item.user_id,
+            chat_id=item.chat_id,
+            source_message_ids=item.source_message_ids or [],
+            source_quotes=item.source_quotes or [],
+            data=item.data or {},
+            created_at=item.created_at,
         )

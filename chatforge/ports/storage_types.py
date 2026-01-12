@@ -8,12 +8,22 @@ They are decoupled from SQLAlchemy models to allow:
 - Type-safe interfaces without ORM dependencies
 
 Example:
-    from chatforge.ports.storage_types import MessageRecord, ChatRecord
+    from chatforge.ports.storage_types import (
+        MessageRecord,
+        ChatRecord,
+        ProfilingDataExtractionRun,
+        ExtractedProfilingData,
+    )
 
     message = MessageRecord(
         content="Hello, world!",
         role="user",
+    )
+
+    extraction_run = ProfilingDataExtractionRun(
         user_id="user-123",
+        scope_type="single_chat",
+        chat_id="chat-456",
     )
 """
 
@@ -393,6 +403,127 @@ class AgentRunRecord:
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "metadata": self.metadata,
+        }
+
+
+# =============================================================================
+# Profiling Data Extraction Records
+# =============================================================================
+
+
+@dataclass
+class ProfilingDataExtractionRun:
+    """
+    Record of a profiling data extraction operation.
+
+    Tracks each run of the extraction service, including scope,
+    status, and metrics.
+
+    Attributes:
+        id: Unique identifier
+        user_id: User being profiled
+        chat_id: Which chat (None = all user's chats)
+        status: 'pending', 'running', 'completed', 'failed'
+        error: Error message if failed
+        config: Extraction configuration (dimensions, thresholds)
+        model_used: LLM model used for extraction
+        message_count: Total messages processed
+        message_id_range: Range of message IDs processed
+        duration_ms: Extraction duration in milliseconds
+        started_at: When extraction started
+        completed_at: When extraction finished
+        created_at: When record was created
+    """
+    id: int | str | None = None
+    user_id: str = ""
+
+    # Scope (chat_id=None means all user's chats)
+    chat_id: int | str | None = None
+
+    # Status
+    status: str = "pending"
+    error: str | None = None
+
+    # Config
+    config: dict[str, Any] = field(default_factory=dict)
+    model_used: str | None = None
+
+    # Metrics
+    message_count: int = 0
+    message_id_range: dict[str, Any] | None = None
+    duration_ms: int | None = None
+
+    # Timestamps
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime = field(default_factory=_utc_now)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "chat_id": self.chat_id,
+            "status": self.status,
+            "error": self.error,
+            "config": self.config,
+            "model_used": self.model_used,
+            "message_count": self.message_count,
+            "message_id_range": self.message_id_range,
+            "duration_ms": self.duration_ms,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+@dataclass
+class ExtractedProfilingData:
+    """
+    Record of extracted profiling data with full traceability.
+
+    Each record represents a piece of profiling data extracted from
+    user messages, with links back to source messages and quotes.
+
+    The `data` field is format-agnostic - stores CPF-7 dimensions,
+    confidence scores, etc. as JSON. Schema doesn't change if
+    extraction format evolves.
+
+    Attributes:
+        id: Unique identifier
+        extraction_run_id: Which run produced this
+        user_id: User this data is about
+        chat_id: Which chat this came from
+        source_message_ids: Message IDs this was extracted from
+        source_quotes: Exact quotes from messages
+        data: Extracted profiling data (format-agnostic JSON)
+        created_at: When extracted
+    """
+    id: int | str | None = None
+    extraction_run_id: int | str | None = None
+    user_id: str = ""
+
+    # Source traceability
+    chat_id: int | str | None = None
+    source_message_ids: list[int | str] = field(default_factory=list)
+    source_quotes: list[str] = field(default_factory=list)
+
+    # Extracted content (format-agnostic)
+    data: dict[str, Any] = field(default_factory=dict)
+
+    created_at: datetime = field(default_factory=_utc_now)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "id": self.id,
+            "extraction_run_id": self.extraction_run_id,
+            "user_id": self.user_id,
+            "chat_id": self.chat_id,
+            "source_message_ids": self.source_message_ids,
+            "source_quotes": self.source_quotes,
+            "data": self.data,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 

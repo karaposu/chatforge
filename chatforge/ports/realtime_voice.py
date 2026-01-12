@@ -23,7 +23,7 @@ Usage:
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Literal
+from typing import TYPE_CHECKING, Any, AsyncGenerator, ClassVar, Literal
 import time
 
 
@@ -258,6 +258,7 @@ class ProviderCapabilities:
     supports_interruption: bool = True
     supports_transcription: bool = True
     supports_input_transcription: bool = True
+    supports_conversation_reset: bool = False
     max_audio_length_seconds: float | None = None
     available_voices: list[str] = field(default_factory=list)
     available_models: list[str] = field(default_factory=list)
@@ -292,7 +293,63 @@ class RealtimeVoiceAPIPort(ABC):
                         await audio.play(event.data)
 
             await asyncio.gather(send_loop(), receive_loop())
+
+    Using the registry pattern:
+        import chatforge.adapters.realtime  # Triggers registration
+
+        # Create adapter by provider name
+        adapter = RealtimeVoiceAPIPort.create("openai")
+        adapter = RealtimeVoiceAPIPort.create("grok")
+
+        # List available providers
+        providers = RealtimeVoiceAPIPort.available_providers()
     """
+
+    # =========================================================================
+    # Adapter Registry
+    # =========================================================================
+
+    _adapters: ClassVar[dict[str, type["RealtimeVoiceAPIPort"]]] = {}
+
+    @classmethod
+    def register(cls, provider: str):
+        """
+        Decorator to register an adapter for a provider.
+
+        Usage:
+            @RealtimeVoiceAPIPort.register("openai")
+            class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
+                ...
+        """
+        def decorator(adapter_cls: type["RealtimeVoiceAPIPort"]):
+            cls._adapters[provider] = adapter_cls
+            return adapter_cls
+        return decorator
+
+    @classmethod
+    def create(cls, provider: str, **kwargs) -> "RealtimeVoiceAPIPort":
+        """
+        Create adapter instance for provider.
+
+        Args:
+            provider: Provider name ("openai", "grok", etc.)
+            **kwargs: Optional overrides (api_key, model, etc.)
+
+        Returns:
+            Configured adapter instance (not yet connected)
+
+        Raises:
+            ValueError: If provider not registered or config missing
+        """
+        if provider not in cls._adapters:
+            available = list(cls._adapters.keys())
+            raise ValueError(f"Unknown provider '{provider}'. Available: {available}")
+        return cls._adapters[provider](**kwargs)
+
+    @classmethod
+    def available_providers(cls) -> list[str]:
+        """List registered provider names."""
+        return list(cls._adapters.keys())
 
     # =========================================================================
     # Abstract Properties
@@ -430,6 +487,30 @@ class RealtimeVoiceAPIPort(ABC):
 
         Args:
             response_id: Specific response to cancel, or None for current
+        """
+        ...
+
+    # =========================================================================
+    # Conversation Management
+    # =========================================================================
+
+    @abstractmethod
+    async def reset_conversation(self) -> None:
+        """
+        Clear conversation history.
+
+        After reset:
+        - Conversation history is empty
+        - System prompt remains active
+        - Tools remain configured
+        - Session stays connected
+
+        Use this for "stateless-like" behavior where you want
+        to inject fresh context without prior conversation history.
+
+        Raises:
+            RealtimeSessionError: Not connected
+            NotImplementedError: Provider doesn't support reset
         """
         ...
 

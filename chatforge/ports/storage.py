@@ -12,7 +12,8 @@ The core agent logic depends only on this interface, enabling:
 
 The interface has two layers:
 1. Legacy interface (required): save_message, get_conversation, etc.
-2. Extended interface (optional): create_chat, log_tool_call, start_agent_run, etc.
+2. Extended interface (optional): create_chat, log_tool_call, start_agent_run,
+   create_extraction_run, save_extracted_profiling_data, etc.
 
 Simple adapters only need to implement the legacy interface.
 Full-featured adapters can implement the extended interface for observability.
@@ -32,6 +33,8 @@ from chatforge.ports.storage_types import (
     MessageMetadata,
     ChatMetadata,
     TokenUsage,
+    ProfilingDataExtractionRun,
+    ExtractedProfilingData,
 )
 
 # Legacy alias
@@ -355,4 +358,109 @@ class StoragePort(ABC):
         limit: int = 100,
     ) -> list[AgentRunRecord]:
         """List agent runs with optional filters."""
+        raise NotImplementedError("Extended interface not implemented")
+
+    # Profiling Data Extraction Operations
+
+    async def create_extraction_run(
+        self,
+        run: ProfilingDataExtractionRun,
+    ) -> ProfilingDataExtractionRun:
+        """
+        Create a new profiling data extraction run.
+
+        Args:
+            run: The extraction run record with initial values.
+                 chat_id=None means extract from all user's chats.
+
+        Returns:
+            The created record with id populated.
+        """
+        raise NotImplementedError("Extended interface not implemented")
+
+    async def update_extraction_run(
+        self,
+        run_id: int | str,
+        updates: dict[str, Any],
+    ) -> ProfilingDataExtractionRun:
+        """
+        Update an extraction run (status, metrics, error).
+
+        Args:
+            run_id: The extraction run to update.
+            updates: Dict of fields to update (partial update).
+
+        Returns:
+            The updated record.
+        """
+        raise NotImplementedError("Extended interface not implemented")
+
+    async def get_extraction_run(
+        self,
+        run_id: int | str,
+    ) -> ProfilingDataExtractionRun | None:
+        """
+        Get an extraction run by ID.
+
+        Args:
+            run_id: The extraction run ID.
+
+        Returns:
+            The record if found, None otherwise.
+        """
+        raise NotImplementedError("Extended interface not implemented")
+
+    async def save_extracted_profiling_data(
+        self,
+        data: list[ExtractedProfilingData],
+    ) -> list[ExtractedProfilingData]:
+        """
+        Save a batch of extracted profiling data.
+
+        Args:
+            data: List of extracted data records to save.
+
+        Returns:
+            The saved records with ids populated.
+        """
+        raise NotImplementedError("Extended interface not implemented")
+
+    async def get_extracted_profiling_data(
+        self,
+        user_id: str,
+        chat_id: int | str | None = None,
+        limit: int = 100,
+    ) -> list[ExtractedProfilingData]:
+        """
+        Get extracted profiling data for a user.
+
+        Args:
+            user_id: The user whose data to retrieve.
+            chat_id: Optional - filter to specific chat, or None for all chats.
+            limit: Maximum records to return.
+
+        Returns:
+            List of records ordered by created_at DESC.
+        """
+        raise NotImplementedError("Extended interface not implemented")
+
+    async def get_messages_for_extraction(
+        self,
+        user_id: str,
+        chat_id: int | str | None = None,
+        since_message_id: int | str | None = None,
+        limit: int = 100,
+    ) -> list[MessageRecord]:
+        """
+        Get user's messages for profiling data extraction.
+
+        Args:
+            user_id: The user whose messages to retrieve.
+            chat_id: Optional - specific chat, or None for all user's chats.
+            since_message_id: Optional - for incremental extraction, skip older messages.
+            limit: Maximum messages to return.
+
+        Returns:
+            List of user's messages ordered by id/timestamp.
+        """
         raise NotImplementedError("Extended interface not implemented")
