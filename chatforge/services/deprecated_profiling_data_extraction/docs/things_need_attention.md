@@ -97,7 +97,7 @@ output_format: str
 
 ### What Needs to Be Determined
 - Add `context_window`? (needed for per-message extraction)
-- Add `deduplication`? (depends on data source quality)
+
 - Is `batch_size` still relevant if using per-message model?
 - Should we rename/repurpose `batch_size` to mean something else?
 

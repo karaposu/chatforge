@@ -274,7 +274,46 @@ ExtractedProfilingData              →         UserProfile
 
 | Question | Current State | Recommendation |
 |----------|---------------|----------------|
-| Per-message vs Batch? | Prompts expect per-message | **Per-message with context window** |
+| Per-message vs Batch? | Prompts expect per-message | **Batch combined (Option B)** |
 | Add `context_window` to config? | Not in config.py | **Yes, add it** |
 | Add `deduplication` to config? | Not in config.py | Optional, can add later |
 | Include aggregation? | Out of scope per details.md | **Confirm out of scope** |
+
+---
+
+## Dynamic Batch Size: Not Needed
+
+### Initial Thought
+
+When a conversation starts and user says "My name is Ali", the AI should use this immediately (e.g., respond "Hi Ali!"). This suggested batch_size should be dynamic - perhaps batch_size=1 for immediate extraction.
+
+### Why It's Not Needed
+
+The LLM always sees the full conversation history when generating responses. Even without extraction:
+
+```
+User: My name is Ali
+LLM sees: [conversation history including "My name is Ali"]
+LLM responds: "Hi Ali! How can I help you?"
+```
+
+Profiling data extraction is for **long-term memory and personalization**, not for immediate conversational context. The LLM already has immediate context from the conversation history.
+
+### Conclusion
+
+- **Static batch size is fine** - extraction doesn't need to be real-time
+- **Extraction is background processing** - runs periodically or after conversation ends
+- **LLM conversation context ≠ extracted profile data**
+
+### Experiments Planned
+
+Test different batch sizes to find optimal balance:
+
+| Batch Size | Trade-off |
+|------------|-----------|
+| 5 | More calls, potentially higher precision |
+| 10 | Balanced |
+| 15 | Default recommendation |
+| 25 | Fewer calls, test if accuracy degrades |
+
+Will evaluate: extraction quality, cost, latency.
