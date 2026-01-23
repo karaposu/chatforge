@@ -2,7 +2,11 @@
 Profiling Data Extraction Service.
 
 Extracts profiling data from conversations using LLM-based semantic understanding.
-Implements CPDE-7 (Conversational Profiling Data Extraction - 7 Dimensions).
+
+Available Frameworks:
+- CPDE-7: Conversational Profiling Data Extraction - 7 Dimensions (implemented)
+- ASNE: Atomic Semantic Natural-language Extraction (future)
+- CAF: Conversation Anatomy Framework (future)
 
 Note: This service extracts raw profiling data, not aggregated profiles.
 Profiling (aggregation) is a separate future step.
@@ -11,26 +15,43 @@ Usage:
     from chatforge.services.profiling_data_extraction import (
         CPDE7LLMService,
         ExtractionConfig,
+        ProfilingDataExtractor,
+        BaseExtractionOrchestrator,
     )
 
     # Direct LLM extraction
     service = CPDE7LLMService(provider="openai", model_name="gpt-4o-mini")
-    result = service.extract_core_identity(messages_text)
+    result = await service.extract_core_identity(messages_text)
 
-    # Configuration for batch processing
-    config = ExtractionConfig(
-        dimensions=["core_identity", "preferences_patterns"],
-        batch_size=50,
-    )
+    # Pure extraction (no DB)
+    extractor = ProfilingDataExtractor(service, batch_size=50)
+    items = await extractor.extract_batch(messages)
+
+    # Full orchestration (subclass for your app)
+    class MyService(BaseExtractionOrchestrator):
+        def get_repository(self): ...
+        def create_session(self): ...
+        def close_session(self, session): ...
 """
 
-from chatforge.services.profiling_data_extraction.config import (
+# Extractor and Orchestrator (generic building blocks)
+from chatforge.services.profiling_data_extraction.extractor import (
+    ProfilingDataExtractor,
+    ExtractedItem,
+)
+from chatforge.services.profiling_data_extraction.orchestrator import (
+    BaseExtractionOrchestrator,
+    ExtractionRepository,
+)
+
+# Re-export from CPDE-7 (primary framework)
+from chatforge.services.profiling_data_extraction.cpde7 import (
+    # Service
+    CPDE7LLMService,
+    # Config
     ExtractionConfig,
     CPF7_DIMENSIONS,
-)
-from chatforge.services.profiling_data_extraction.cpde7llmservice import CPDE7LLMService
-from chatforge.services.profiling_data_extraction.models import (
-    # Batch output models (for structured output)
+    # Batch output models
     BatchCoreIdentityOutput,
     BatchOpinionsOutput,
     BatchPreferencesOutput,
@@ -40,13 +61,22 @@ from chatforge.services.profiling_data_extraction.models import (
     BatchEntitiesOutput,
     # Combined result
     BatchProfilingDataExtractionResult,
-    BatchFullExtractionResult,  # Backward compatibility alias
+    BatchFullExtractionResult,
     BatchAll7Output,
+    # Service-level result
+    ExtractionRunResult,
     # Registry
     BATCH_DIMENSION_MODELS,
+    # Targeted extraction helpers
+    format_messages_with_markers,
 )
 
 __all__ = [
+    # Generic building blocks
+    "ProfilingDataExtractor",
+    "ExtractedItem",
+    "BaseExtractionOrchestrator",
+    "ExtractionRepository",
     # Service
     "CPDE7LLMService",
     # Config
@@ -61,7 +91,10 @@ __all__ = [
     "BatchEventsOutput",
     "BatchEntitiesOutput",
     "BatchProfilingDataExtractionResult",
-    "BatchFullExtractionResult",  # Backward compatibility alias
+    "BatchFullExtractionResult",
     "BatchAll7Output",
+    "ExtractionRunResult",
     "BATCH_DIMENSION_MODELS",
+    # Targeted extraction helpers
+    "format_messages_with_markers",
 ]

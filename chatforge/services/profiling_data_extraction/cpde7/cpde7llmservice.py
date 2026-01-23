@@ -29,7 +29,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 
 from chatforge.services.llm.factory import get_llm
-from chatforge.services.profiling_data_extraction.batch_prompts import (
+from chatforge.services.profiling_data_extraction.cpde7.batch_prompts import (
     CPDE_CORE_IDENTITY_BATCH,
     CPDE_OPINIONS_VIEWS_BATCH,
     CPDE_PREFERENCES_PATTERNS_BATCH,
@@ -39,7 +39,18 @@ from chatforge.services.profiling_data_extraction.batch_prompts import (
     CPDE_ENTITIES_RELATIONSHIPS_BATCH,
     CPDE_ALL_7_BATCH,
 )
-from chatforge.services.profiling_data_extraction.models import (
+from chatforge.services.profiling_data_extraction.cpde7.batch_prompts_targeted import (
+    CPDE_CORE_IDENTITY_TARGETED,
+    CPDE_OPINIONS_VIEWS_TARGETED,
+    CPDE_PREFERENCES_PATTERNS_TARGETED,
+    CPDE_DESIRES_NEEDS_TARGETED,
+    CPDE_LIFE_NARRATIVE_TARGETED,
+    CPDE_EVENTS_TARGETED,
+    CPDE_ENTITIES_RELATIONSHIPS_TARGETED,
+    CPDE_ALL_7_TARGETED,
+    format_messages_with_markers,
+)
+from chatforge.services.profiling_data_extraction.cpde7.models import (
     # Batch output models
     BatchCoreIdentityOutput,
     BatchOpinionsOutput,
@@ -52,7 +63,7 @@ from chatforge.services.profiling_data_extraction.models import (
     BatchProfilingDataExtractionResult,
     BatchAll7Output,
 )
-from chatforge.services.profiling_data_extraction.prompts import (
+from chatforge.services.profiling_data_extraction.cpde7.prompts import (
     build_prompt,
     build_output_model,
     DIMENSION_NAMES,
@@ -560,3 +571,408 @@ class CPDE7LLMService:
             return await self._extract_per_dimension(messages, dimensions, parallel)
         else:
             return await self._extract_combined(messages, dimensions)
+
+    # =========================================================================
+    # Targeted Extraction Methods
+    # =========================================================================
+    #
+    # These methods extract ONLY from TARGET messages, using CONTEXT messages
+    # for understanding references. This prevents extracting AI assumptions,
+    # reflections, and leading questions as profile facts.
+    #
+    # Messages should be formatted with inline markers:
+    #   Role: user (TARGET)
+    #   Role: assistant (CONTEXT)
+    #
+    # Use format_messages_with_markers() helper or pass pre-formatted text.
+    # =========================================================================
+
+    async def extract_core_identity_targeted(
+        self,
+        messages: str | list[dict],
+        target_roles: list[str] | None = None,
+    ) -> BatchCoreIdentityOutput:
+        """
+        Extract core identity facts from TARGET messages only.
+
+        Uses CONTEXT messages for understanding references, but only extracts
+        from messages marked as TARGET.
+
+        Args:
+            messages: Either:
+                - Pre-formatted string with (TARGET)/(CONTEXT) markers
+                - List of message dicts with 'id', 'role', 'content' keys
+            target_roles: Roles to mark as TARGET (default: ["user"]).
+                         Only used if messages is a list.
+
+        Returns:
+            BatchCoreIdentityOutput with items only from TARGET messages
+        """
+        formatted = self._format_targeted_messages(messages, target_roles)
+        prompt = CPDE_CORE_IDENTITY_TARGETED.format(messages=formatted)
+        structured_llm = self._get_llm().with_structured_output(BatchCoreIdentityOutput)
+        return await structured_llm.ainvoke([HumanMessage(content=prompt)])
+
+    async def extract_opinions_views_targeted(
+        self,
+        messages: str | list[dict],
+        target_roles: list[str] | None = None,
+    ) -> BatchOpinionsOutput:
+        """
+        Extract non-ephemeral opinions from TARGET messages only.
+
+        Uses CONTEXT messages for understanding references, but only extracts
+        from messages marked as TARGET.
+
+        Args:
+            messages: Either pre-formatted string or list of message dicts
+            target_roles: Roles to mark as TARGET (default: ["user"])
+
+        Returns:
+            BatchOpinionsOutput with items only from TARGET messages
+        """
+        formatted = self._format_targeted_messages(messages, target_roles)
+        prompt = CPDE_OPINIONS_VIEWS_TARGETED.format(messages=formatted)
+        structured_llm = self._get_llm().with_structured_output(BatchOpinionsOutput)
+        return await structured_llm.ainvoke([HumanMessage(content=prompt)])
+
+    async def extract_preferences_patterns_targeted(
+        self,
+        messages: str | list[dict],
+        target_roles: list[str] | None = None,
+    ) -> BatchPreferencesOutput:
+        """
+        Extract preferences and patterns from TARGET messages only.
+
+        Uses CONTEXT messages for understanding references, but only extracts
+        from messages marked as TARGET.
+
+        Args:
+            messages: Either pre-formatted string or list of message dicts
+            target_roles: Roles to mark as TARGET (default: ["user"])
+
+        Returns:
+            BatchPreferencesOutput with items only from TARGET messages
+        """
+        formatted = self._format_targeted_messages(messages, target_roles)
+        prompt = CPDE_PREFERENCES_PATTERNS_TARGETED.format(messages=formatted)
+        structured_llm = self._get_llm().with_structured_output(BatchPreferencesOutput)
+        return await structured_llm.ainvoke([HumanMessage(content=prompt)])
+
+    async def extract_desires_needs_targeted(
+        self,
+        messages: str | list[dict],
+        target_roles: list[str] | None = None,
+    ) -> BatchDesiresOutput:
+        """
+        Extract desires, wishes, hopes, and needs from TARGET messages only.
+
+        Uses CONTEXT messages for understanding references, but only extracts
+        from messages marked as TARGET.
+
+        Args:
+            messages: Either pre-formatted string or list of message dicts
+            target_roles: Roles to mark as TARGET (default: ["user"])
+
+        Returns:
+            BatchDesiresOutput with items only from TARGET messages
+        """
+        formatted = self._format_targeted_messages(messages, target_roles)
+        prompt = CPDE_DESIRES_NEEDS_TARGETED.format(messages=formatted)
+        structured_llm = self._get_llm().with_structured_output(BatchDesiresOutput)
+        return await structured_llm.ainvoke([HumanMessage(content=prompt)])
+
+    async def extract_life_narrative_targeted(
+        self,
+        messages: str | list[dict],
+        target_roles: list[str] | None = None,
+    ) -> BatchNarrativeOutput:
+        """
+        Extract life narrative elements from TARGET messages only.
+
+        Uses CONTEXT messages for understanding references, but only extracts
+        from messages marked as TARGET.
+
+        Args:
+            messages: Either pre-formatted string or list of message dicts
+            target_roles: Roles to mark as TARGET (default: ["user"])
+
+        Returns:
+            BatchNarrativeOutput with items only from TARGET messages
+        """
+        formatted = self._format_targeted_messages(messages, target_roles)
+        prompt = CPDE_LIFE_NARRATIVE_TARGETED.format(messages=formatted)
+        structured_llm = self._get_llm().with_structured_output(BatchNarrativeOutput)
+        return await structured_llm.ainvoke([HumanMessage(content=prompt)])
+
+    async def extract_events_targeted(
+        self,
+        messages: str | list[dict],
+        target_roles: list[str] | None = None,
+    ) -> BatchEventsOutput:
+        """
+        Extract significant events from TARGET messages only.
+
+        Uses CONTEXT messages for understanding references, but only extracts
+        from messages marked as TARGET.
+
+        Args:
+            messages: Either pre-formatted string or list of message dicts
+            target_roles: Roles to mark as TARGET (default: ["user"])
+
+        Returns:
+            BatchEventsOutput with items only from TARGET messages
+        """
+        formatted = self._format_targeted_messages(messages, target_roles)
+        prompt = CPDE_EVENTS_TARGETED.format(messages=formatted)
+        structured_llm = self._get_llm().with_structured_output(BatchEventsOutput)
+        return await structured_llm.ainvoke([HumanMessage(content=prompt)])
+
+    async def extract_entities_relationships_targeted(
+        self,
+        messages: str | list[dict],
+        target_roles: list[str] | None = None,
+    ) -> BatchEntitiesOutput:
+        """
+        Extract entities and relationships from TARGET messages only.
+
+        Uses CONTEXT messages for understanding references, but only extracts
+        from messages marked as TARGET.
+
+        Args:
+            messages: Either pre-formatted string or list of message dicts
+            target_roles: Roles to mark as TARGET (default: ["user"])
+
+        Returns:
+            BatchEntitiesOutput with items only from TARGET messages
+        """
+        formatted = self._format_targeted_messages(messages, target_roles)
+        prompt = CPDE_ENTITIES_RELATIONSHIPS_TARGETED.format(messages=formatted)
+        structured_llm = self._get_llm().with_structured_output(BatchEntitiesOutput)
+        return await structured_llm.ainvoke([HumanMessage(content=prompt)])
+
+    # =========================================================================
+    # Combined Targeted Extraction
+    # =========================================================================
+
+    async def extract_all_7_targeted(
+        self,
+        messages: str | list[dict],
+        target_roles: list[str] | None = None,
+    ) -> BatchAll7Output:
+        """
+        Extract all 7 dimensions from TARGET messages only in a single LLM call.
+
+        This method extracts profiling data ONLY from TARGET messages while using
+        CONTEXT messages for understanding references. This prevents AI assumptions,
+        reflections, and leading questions from becoming profile facts.
+
+        Args:
+            messages: Either:
+                - Pre-formatted string with (TARGET)/(CONTEXT) markers
+                - List of message dicts with 'id', 'role', 'content' keys
+            target_roles: Roles to mark as TARGET (default: ["user"]).
+                         Only used if messages is a list.
+
+        Returns:
+            BatchAll7Output with all 7 dimensions populated.
+            All items will have source_message_id from TARGET messages only.
+
+        Example:
+            # Using list of messages (auto-formatted)
+            messages = [
+                {"id": "msg_1", "role": "assistant", "content": "What do you do?"},
+                {"id": "msg_2", "role": "user", "content": "I'm an engineer at Google"},
+            ]
+            result = await service.extract_all_7_targeted(messages)
+
+            # Using pre-formatted string
+            formatted = format_messages_with_markers(messages, target_roles=["user"])
+            result = await service.extract_all_7_targeted(formatted)
+        """
+        formatted = self._format_targeted_messages(messages, target_roles)
+        prompt = CPDE_ALL_7_TARGETED.format(messages=formatted)
+        structured_llm = self._get_llm().with_structured_output(BatchAll7Output)
+        return await structured_llm.ainvoke([HumanMessage(content=prompt)])
+
+    async def extract_targeted(
+        self,
+        messages: str | list[dict],
+        target_roles: list[str] | None = None,
+        dimensions: list[str] | None = None,
+        parallel: bool = False,
+    ) -> BatchProfilingDataExtractionResult:
+        """
+        Extract selected dimensions from TARGET messages only.
+
+        This is the main entry point for targeted extraction. It extracts profiling
+        data ONLY from TARGET messages while using CONTEXT messages for understanding.
+
+        Args:
+            messages: Either:
+                - Pre-formatted string with (TARGET)/(CONTEXT) markers
+                - List of message dicts with 'id', 'role', 'content' keys
+            target_roles: Roles to mark as TARGET (default: ["user"]).
+                         Only used if messages is a list.
+            dimensions: List of dimensions to extract. If None, extracts all 7.
+                       Valid values: core_identity, opinions_views, preferences_patterns,
+                       desires_needs, life_narrative, events, entities_relationships
+            parallel: If True and extracting multiple dimensions separately,
+                     run extractions concurrently.
+
+        Returns:
+            BatchProfilingDataExtractionResult with requested dimensions populated.
+            All items will have source_message_id from TARGET messages only.
+
+        Example:
+            # Profile user messages only from a conversation
+            messages = [
+                {"id": "msg_1", "role": "assistant", "content": "You seem introverted"},
+                {"id": "msg_2", "role": "user", "content": "Yes, I'm definitely an introvert"},
+                {"id": "msg_3", "role": "assistant", "content": "Do you want more friends?"},
+                {"id": "msg_4", "role": "user", "content": "Maybe, I'm not sure"},
+            ]
+
+            result = await service.extract_targeted(
+                messages=messages,
+                target_roles=["user"],
+                dimensions=["core_identity", "desires_needs"],
+            )
+
+            # "introvert" extracted from msg_2 (strong confirmation)
+            # "want more friends" NOT extracted from msg_4 (weak confirmation)
+        """
+        all_dimensions = list(DIMENSION_NAMES)
+
+        if dimensions is None:
+            dimensions = all_dimensions
+
+        # Validate dimensions
+        for dim in dimensions:
+            if dim not in DIMENSION_NAMES:
+                raise ValueError(f"Invalid dimension: {dim}. Valid: {DIMENSION_NAMES}")
+
+        # Format messages if needed
+        formatted = self._format_targeted_messages(messages, target_roles)
+
+        # If extracting all 7 dimensions, use the optimized single-call method
+        if set(dimensions) == set(all_dimensions):
+            all_7_result = await self.extract_all_7_targeted(formatted)
+            return BatchProfilingDataExtractionResult(
+                core_identity=all_7_result.core_identity,
+                opinions_views=all_7_result.opinions_views,
+                preferences_patterns=all_7_result.preferences_patterns,
+                desires_needs=all_7_result.desires_needs,
+                life_narrative=all_7_result.life_narrative,
+                events=all_7_result.events,
+                entities_relationships=all_7_result.entities_relationships,
+            )
+
+        # Map dimension names to targeted extraction methods
+        targeted_extractors = {
+            "core_identity": self.extract_core_identity_targeted,
+            "opinions_views": self.extract_opinions_views_targeted,
+            "preferences_patterns": self.extract_preferences_patterns_targeted,
+            "desires_needs": self.extract_desires_needs_targeted,
+            "life_narrative": self.extract_life_narrative_targeted,
+            "events": self.extract_events_targeted,
+            "entities_relationships": self.extract_entities_relationships_targeted,
+        }
+
+        result = BatchProfilingDataExtractionResult()
+
+        if parallel and len(dimensions) > 1:
+            # Run extractions concurrently
+            tasks = [targeted_extractors[dim](formatted) for dim in dimensions]
+            outputs = await asyncio.gather(*tasks)
+
+            for dim, output in zip(dimensions, outputs):
+                inner = getattr(output, dim)
+                setattr(result, dim, inner)
+        else:
+            # Sequential extraction
+            for dim in dimensions:
+                output = await targeted_extractors[dim](formatted)
+                inner = getattr(output, dim)
+                setattr(result, dim, inner)
+
+        return result
+
+    # =========================================================================
+    # Targeted Extraction by Dimension Name
+    # =========================================================================
+
+    async def extract_dimension_targeted(
+        self,
+        messages: str | list[dict],
+        dimension: str,
+        target_roles: list[str] | None = None,
+    ) -> (
+        BatchCoreIdentityOutput |
+        BatchOpinionsOutput |
+        BatchPreferencesOutput |
+        BatchDesiresOutput |
+        BatchNarrativeOutput |
+        BatchEventsOutput |
+        BatchEntitiesOutput
+    ):
+        """
+        Extract a single dimension by name from TARGET messages only.
+
+        Args:
+            messages: Either pre-formatted string or list of message dicts
+            dimension: Dimension name (e.g., 'core_identity', 'events')
+            target_roles: Roles to mark as TARGET (default: ["user"])
+
+        Returns:
+            The appropriate BatchOutput model for that dimension
+
+        Raises:
+            ValueError: If dimension name is invalid
+        """
+        targeted_extractors = {
+            "core_identity": self.extract_core_identity_targeted,
+            "opinions_views": self.extract_opinions_views_targeted,
+            "preferences_patterns": self.extract_preferences_patterns_targeted,
+            "desires_needs": self.extract_desires_needs_targeted,
+            "life_narrative": self.extract_life_narrative_targeted,
+            "events": self.extract_events_targeted,
+            "entities_relationships": self.extract_entities_relationships_targeted,
+        }
+
+        if dimension not in targeted_extractors:
+            raise ValueError(
+                f"Invalid dimension: {dimension}. "
+                f"Valid dimensions: {list(targeted_extractors.keys())}"
+            )
+
+        return await targeted_extractors[dimension](messages, target_roles)
+
+    # =========================================================================
+    # Helper Methods
+    # =========================================================================
+
+    def _format_targeted_messages(
+        self,
+        messages: str | list[dict],
+        target_roles: list[str] | None = None,
+    ) -> str:
+        """
+        Format messages with TARGET/CONTEXT markers if needed.
+
+        Args:
+            messages: Either pre-formatted string or list of message dicts
+            target_roles: Roles to mark as TARGET (default: ["user"])
+
+        Returns:
+            Formatted string with inline markers
+        """
+        if isinstance(messages, str):
+            # Already formatted
+            return messages
+
+        # Format using helper function
+        return format_messages_with_markers(
+            messages=messages,
+            target_roles=target_roles,
+        )

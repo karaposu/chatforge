@@ -51,6 +51,10 @@ class LLMSettings(BaseSettings):
         ge=0.0,
         le=1.0,
     )
+    timeout: float = Field(
+        default=300.0,
+        description="Request timeout in seconds. Higher values needed for reasoning models.",
+    )
 
     # API keys use standard names (no LLM_ prefix for compatibility)
     openai_api_key: str | None = Field(

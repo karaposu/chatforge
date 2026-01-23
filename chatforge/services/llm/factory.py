@@ -15,6 +15,7 @@ def get_llm(
     model_name: str | None = None,
     streaming: bool = False,
     temperature: float | None = None,
+    **kwargs,
 ) -> BaseChatModel:
     """
     Get LLM instance based on provider configuration.
@@ -30,6 +31,11 @@ def get_llm(
         streaming: Enable streaming responses (default: False)
         temperature: Model temperature for response randomness (0.0-1.0).
                     If None, uses llm_config.temperature
+        **kwargs: Additional model-specific parameters passed to the LLM.
+                 For OpenAI reasoning models (gpt-5.x, o1, o3, etc.):
+                   - reasoning_effort: 'low', 'medium', 'high', 'xhigh' (gpt-5.2)
+                   - reasoning: dict with 'effort' and 'summary' keys
+                 Any other LangChain ChatOpenAI/ChatAnthropic parameters.
 
     Returns:
         BaseChatModel: LangChain chat model instance
@@ -40,17 +46,21 @@ def get_llm(
     Example:
         >>> llm = get_llm(provider="openai", streaming=True)
         >>> response = llm.invoke("Hello, how are you?")
+
+        >>> # With reasoning effort for gpt-5.2
+        >>> llm = get_llm(model_name="gpt-5.2", reasoning_effort="medium")
+        >>> response = llm.invoke("Solve this complex problem...")
     """
     provider = provider or llm_config.provider
     model_name = model_name or llm_config.model_name
     temperature = temperature if temperature is not None else llm_config.temperature
 
     if provider == "openai":
-        return _get_openai_llm(model_name, streaming, temperature)
+        return _get_openai_llm(model_name, streaming, temperature, **kwargs)
     if provider == "anthropic":
-        return _get_anthropic_llm(model_name, streaming, temperature)
+        return _get_anthropic_llm(model_name, streaming, temperature, **kwargs)
     if provider == "bedrock":
-        return _get_bedrock_llm(model_name, streaming, temperature)
+        return _get_bedrock_llm(model_name, streaming, temperature, **kwargs)
     raise ValueError(f"Unsupported LLM provider: {provider}. Supported: openai, anthropic, bedrock")
 
 
@@ -58,6 +68,7 @@ def get_streaming_llm(
     provider: str | None = None,
     model_name: str | None = None,
     temperature: float | None = None,
+    **kwargs,
 ) -> BaseChatModel:
     """
     Get streaming-enabled LLM instance.
@@ -68,6 +79,7 @@ def get_streaming_llm(
         provider: LLM provider. If None, uses llm_config.provider
         model_name: Model name. If None, uses llm_config.model_name
         temperature: Model temperature (0.0-1.0). If None, uses llm_config.temperature
+        **kwargs: Additional model-specific parameters (see get_llm for details)
 
     Returns:
         BaseChatModel: Streaming-enabled LLM instance
@@ -82,6 +94,7 @@ def get_streaming_llm(
         model_name=model_name,
         streaming=True,
         temperature=temperature,
+        **kwargs,
     )
 
 
@@ -97,6 +110,7 @@ def get_vision_llm(
     provider: str | None = None,
     model_name: str | None = None,
     temperature: float | None = None,
+    **kwargs,
 ) -> BaseChatModel:
     """
     Get a vision-capable LLM instance for image analysis.
@@ -114,6 +128,7 @@ def get_vision_llm(
                  If None, uses llm_config.provider
         model_name: Explicit model name override. If None, uses env var or default.
         temperature: Model temperature. If None, uses llm_config.vision_temperature
+        **kwargs: Additional model-specific parameters (see get_llm for details)
 
     Returns:
         BaseChatModel: Vision-capable LangChain chat model
@@ -145,6 +160,7 @@ def get_vision_llm(
         model_name=model_name,
         streaming=False,
         temperature=temperature,
+        **kwargs,
     )
 
 
@@ -162,7 +178,7 @@ def supports_vision(provider: str | None = None) -> bool:
     return provider in DEFAULT_VISION_MODELS
 
 
-def _get_openai_llm(model_name: str, streaming: bool, temperature: float):
+def _get_openai_llm(model_name: str, streaming: bool, temperature: float, **kwargs):
     """Create OpenAI LLM instance."""
     try:
         from langchain_openai import ChatOpenAI
@@ -177,17 +193,27 @@ def _get_openai_llm(model_name: str, streaming: bool, temperature: float):
             "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable."
         )
 
+    # Allow timeout override via kwargs, otherwise use config
+    timeout = kwargs.pop("timeout", None) or llm_config.timeout
+
+    # Only pass reasoning_effort to models that support it (gpt-5.x, o1, o3)
+    reasoning_effort = kwargs.pop("reasoning_effort", None)
+    is_reasoning_model = model_name.startswith(("gpt-5", "o1", "o3"))
+    if reasoning_effort and is_reasoning_model:
+        kwargs["reasoning_effort"] = reasoning_effort
+
     return ChatOpenAI(
         model=model_name,
         api_key=llm_config.openai_api_key,
         streaming=streaming,
         temperature=temperature,
-        request_timeout=60,
+        request_timeout=timeout,
         max_retries=3,
+        **kwargs,
     )
 
 
-def _get_anthropic_llm(model_name: str, streaming: bool, temperature: float):
+def _get_anthropic_llm(model_name: str, streaming: bool, temperature: float, **kwargs):
     """Create Anthropic LLM instance."""
     try:
         from langchain_anthropic import ChatAnthropic
@@ -202,17 +228,21 @@ def _get_anthropic_llm(model_name: str, streaming: bool, temperature: float):
             "Anthropic API key not configured. Please set ANTHROPIC_API_KEY environment variable."
         )
 
+    # Allow timeout override via kwargs, otherwise use config
+    timeout = kwargs.pop("timeout", None) or llm_config.timeout
+
     return ChatAnthropic(
         model=model_name,
         anthropic_api_key=llm_config.anthropic_api_key,
         streaming=streaming,
         temperature=temperature,
-        timeout=60,
+        timeout=timeout,
         max_retries=3,
+        **kwargs,
     )
 
 
-def _get_bedrock_llm(model_name: str, streaming: bool, temperature: float):
+def _get_bedrock_llm(model_name: str, streaming: bool, temperature: float, **kwargs):
     """Create AWS Bedrock LLM instance."""
     try:
         from langchain_community.chat_models import BedrockChat
@@ -228,10 +258,16 @@ def _get_bedrock_llm(model_name: str, streaming: bool, temperature: float):
             "Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
         )
 
+    # Merge temperature with any additional model_kwargs
+    model_kwargs = {"temperature": temperature}
+    if "model_kwargs" in kwargs:
+        model_kwargs.update(kwargs.pop("model_kwargs"))
+
     return BedrockChat(
         model_id=model_name,
         streaming=streaming,
-        model_kwargs={"temperature": temperature},
+        model_kwargs=model_kwargs,
         region_name=llm_config.aws_region,
         credentials_profile_name=None,
+        **kwargs,
     )

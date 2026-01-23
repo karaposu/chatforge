@@ -48,7 +48,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["chatforge"]
+packages = ["chatforge", "slidefixer"]
 
 [tool.ruff]
 target-version = "py310"
@@ -60,4 +60,7 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["tests", "slidefixer/tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]

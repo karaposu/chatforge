@@ -9,14 +9,14 @@ from typing import Iterator
 from pydantic import BaseModel, create_model
 from proteas import Proteas, PromptTemplateUnit, generate_combinations, count_combinations
 
-from chatforge.services.profiling_data_extraction.prompts.dimension_units import (
+from chatforge.services.profiling_data_extraction.cpde7.prompts.dimension_units import (
     DIMENSION_UNITS,
     DIMENSION_NAMES,
     HEADER_UNIT,
     MESSAGES_UNIT,
     INSTRUCTIONS_UNIT,
 )
-from chatforge.services.profiling_data_extraction.models import (
+from chatforge.services.profiling_data_extraction.cpde7.models import (
     BatchCoreIdentityResult,
     BatchOpinionsResult,
     BatchPreferencesResult,

@@ -6,7 +6,7 @@ Controls what and how to extract from conversations.
 
 from dataclasses import dataclass, field
 
-from chatforge.services.profiling_data_extraction.prompts.dimension_units import (
+from chatforge.services.profiling_data_extraction.cpde7.prompts.dimension_units import (
     DIMENSION_NAMES,
 )
 

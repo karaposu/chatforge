@@ -750,3 +750,37 @@ class BatchAll7Output(BaseModel):
     entities_relationships: BatchEntitiesResult = Field(
         description="Entities (people, orgs, places) and relationships"
     )
+
+
+class ExtractionRunResult(BaseModel):
+    """Result of a profiling data extraction run.
+
+    Generic response type for any application using CPDE-7 extraction.
+    Contains run metadata and summary statistics.
+
+    This is the SERVICE-level result (run tracking), not the LLM output.
+    For LLM extraction output, see BatchProfilingDataExtractionResult.
+    """
+
+    run_id: int | None = Field(
+        default=None, description="Database run record ID (if persisted)"
+    )
+    status: str = Field(
+        description="Run status: 'completed', 'failed', 'skipped', 'partial'"
+    )
+    items_extracted: int = Field(
+        default=0, description="Total number of items extracted across all dimensions"
+    )
+    duration_ms: int | None = Field(
+        default=None, description="Extraction duration in milliseconds"
+    )
+    dimensions_with_data: list[str] = Field(
+        default_factory=list,
+        description="List of dimensions that had extracted data",
+    )
+    message_count: int | None = Field(
+        default=None, description="Number of messages processed"
+    )
+    error: str | None = Field(
+        default=None, description="Error message if status is 'failed'"
+    )

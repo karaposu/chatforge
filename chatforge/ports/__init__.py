@@ -142,6 +142,10 @@ from chatforge.ports.audio_capture import (
     # Port
     AudioCapturePort,
 )
+from chatforge.ports.artifact_render import (
+    ArtifactRenderPort,
+    ImageFormat,
+)
 
 __all__ = [
     # Messaging Platform Integration
@@ -247,4 +251,7 @@ __all__ = [
     "CaptureDeviceInUseError",
     "UnsupportedConfigError",
     "CaptureTimeoutError",
+    # Artifact Render
+    "ArtifactRenderPort",
+    "ImageFormat",
 ]

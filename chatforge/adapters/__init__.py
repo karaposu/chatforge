@@ -21,6 +21,8 @@ from chatforge.adapters.tts import (
     OpenAIVoiceConfig,
 )
 from chatforge.adapters.audio import VoxStreamAdapter, MockAudioStreamAdapter
+from chatforge.adapters.artifact_render import LibreOfficeRenderDockerServerAdapter
+from chatforge.adapters.artifact_editor import LibreOfficeEditorDockerServerAdapter
 from chatforge.ports import NullTracingAdapter
 
 __all__ = [
@@ -35,6 +37,10 @@ __all__ = [
     # Audio
     "VoxStreamAdapter",
     "MockAudioStreamAdapter",
+    # Artifact Render
+    "LibreOfficeRenderDockerServerAdapter",
+    # Artifact Editor
+    "LibreOfficeEditorDockerServerAdapter",
     # Null/Testing
     "NullMessagingAdapter",
     "NullKnowledgeAdapter",
