@@ -14,9 +14,9 @@ Profiling (aggregation) is a separate future step.
 Usage:
     from chatforge.services.profiling_data_extraction import (
         CPDE7LLMService,
-        ExtractionConfig,
         ProfilingDataExtractor,
-        BaseExtractionOrchestrator,
+        BaseTriggerService,
+        TriggerConfig,
     )
 
     # Direct LLM extraction
@@ -27,11 +27,14 @@ Usage:
     extractor = ProfilingDataExtractor(service, batch_size=50)
     items = await extractor.extract_batch(messages)
 
-    # Full orchestration (subclass for your app)
-    class MyService(BaseExtractionOrchestrator):
-        def get_repository(self): ...
-        def create_session(self): ...
-        def close_session(self, session): ...
+    # Trigger service (provide your app's repositories)
+    trigger = BaseTriggerService(
+        message_repo=my_message_repo,
+        extraction_repo=my_extraction_repo,
+        extractor=extractor,
+        config=TriggerConfig(auto_trigger_threshold=10),
+    )
+    result = await trigger.trigger_extraction(user_id, chat_id)
 """
 
 # Extractor and Orchestrator (generic building blocks)
@@ -42,6 +45,13 @@ from chatforge.services.profiling_data_extraction.extractor import (
 from chatforge.services.profiling_data_extraction.orchestrator import (
     BaseExtractionOrchestrator,
     ExtractionRepository,
+)
+from chatforge.services.profiling_data_extraction.trigger import (
+    BaseTriggerService,
+    TriggerConfig,
+    TriggerResult,
+    MessageRepository,
+    ExtractionRepository as TriggerExtractionRepository,
 )
 
 # Re-export from CPDE-7 (primary framework)
@@ -77,6 +87,12 @@ __all__ = [
     "ExtractedItem",
     "BaseExtractionOrchestrator",
     "ExtractionRepository",
+    # Trigger service
+    "BaseTriggerService",
+    "TriggerConfig",
+    "TriggerResult",
+    "MessageRepository",
+    "TriggerExtractionRepository",
     # Service
     "CPDE7LLMService",
     # Config

@@ -245,6 +245,10 @@ ENTITIES_RELATIONSHIPS_UNIT = PromptTemplateUnit(
 - Generic mentions without relationship context ("Apple announced something")
 - Entities they're merely discussing, not connected to
 
+CRITICAL: DO NOT EXTRACT THE USER THEMSELVES AS AN ENTITY
+- "My name is Enes" → NOT an entity (itself so no need for extraction  )
+- "I am from Turkey" → Turkey IS an entity (place), but the user is not. 
+
 ### Parsing Rule
 When entities are introduced with type descriptors (e.g., 'My dog Max', 'My cat Luna'), extract the descriptor as a property (species: dog, species: cat)
 

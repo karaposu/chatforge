@@ -27,7 +27,7 @@ from typing import Any, Callable, Iterator, Protocol, runtime_checkable
 
 from chatforge.services.profiling_data_extraction.cpde7 import (
     CPDE7LLMService,
-    BatchAll7Output,
+    BatchProfilingDataExtractionResult,
     format_messages_with_markers,
 )
 
@@ -123,10 +123,12 @@ class ProfilingDataExtractor:
         llm_service: CPDE7LLMService,
         batch_size: int = 50,
         target_roles: list[str] | None = None,
+        dimensions: list[str] | None = None,
     ):
         self.llm_service = llm_service
         self.batch_size = batch_size
         self.target_roles = target_roles or ["user"]
+        self.dimensions = dimensions  # None = extract all 7
 
     @property
     def model_info(self) -> str:
@@ -192,6 +194,7 @@ class ProfilingDataExtractor:
         self,
         messages: list,
         target_roles: list[str] | None = None,
+        dimensions: list[str] | None = None,
     ) -> list[ExtractedItem]:
         """
         Extract profiling data from a batch of messages.
@@ -202,17 +205,21 @@ class ProfilingDataExtractor:
         Args:
             messages: List of message objects or dicts
             target_roles: Roles to extract from (default: self.target_roles)
+            dimensions: Dimensions to extract (default: self.dimensions, None = all 7)
 
         Returns:
             List of ExtractedItem objects ready for storage
         """
         # Format messages
         formatted = self.format_messages(messages, target_roles)
+        roles = target_roles or self.target_roles
+        dims = dimensions if dimensions is not None else self.dimensions
 
-        # Call LLM for all 7 dimensions
-        llm_result: BatchAll7Output = await self.llm_service.extract_all_7_targeted(
+        # Extract dimensions (None = all 7)
+        llm_result = await self.llm_service.extract_targeted(
             messages=formatted,
-            target_roles=target_roles or self.target_roles,
+            target_roles=roles,
+            dimensions=dims,
         )
 
         # Parse results into ExtractedItems
@@ -247,12 +254,14 @@ class ProfilingDataExtractor:
 
         return all_items
 
-    def _parse_llm_result(self, result: BatchAll7Output) -> list[ExtractedItem]:
+    def _parse_llm_result(
+        self, result: BatchProfilingDataExtractionResult
+    ) -> list[ExtractedItem]:
         """
-        Parse BatchAll7Output into list of ExtractedItem.
+        Parse LLM result into list of ExtractedItem.
 
         Args:
-            result: LLM extraction result with all 7 dimensions
+            result: LLM extraction result (all 7 or targeted dimensions)
 
         Returns:
             List of ExtractedItem objects
@@ -311,7 +320,7 @@ class ProfilingDataExtractor:
                 return id_part
         return msg_id
 
-    def get_dimensions_with_data(self, result: BatchAll7Output) -> list[str]:
+    def get_dimensions_with_data(self, result: BatchProfilingDataExtractionResult) -> list[str]:
         """
         Get list of dimensions that have extracted data.
 
