@@ -19,6 +19,9 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "sqlalchemy>=2.0.0",
     "aiosqlite>=0.19.0",
+    "Pillow>=10.0.0",
+    "proteas",
+    "websockets>=12.0",
 ]
 
 [project.optional-dependencies]
