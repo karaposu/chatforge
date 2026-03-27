@@ -406,6 +406,8 @@ class ToolCall(Base):
         ForeignKey("agent_runs.id", ondelete="SET NULL"),
         nullable=True,
     )
+    tool_call_id = Column(String(100), nullable=True)  # LangGraph correlation ID from tc["id"]
+    agent_name = Column(String(100), nullable=True)  # Which subagent invoked this tool
     tool_name = Column(String(100), nullable=False)
     tool_version = Column(String(20), nullable=True)
     input_params = Column(JSON, nullable=False)
@@ -424,6 +426,8 @@ class ToolCall(Base):
     __table_args__ = (
         Index("idx_tool_calls_message_id", "message_id"),
         Index("idx_tool_calls_run_id", "run_id"),
+        Index("idx_tool_calls_tool_call_id", "tool_call_id"),
+        Index("idx_tool_calls_agent_name", "agent_name"),
         Index("idx_tool_calls_tool_name", "tool_name"),
         Index("idx_tool_calls_status", "status"),
         Index("idx_tool_calls_created_at", "created_at"),
@@ -438,6 +442,8 @@ class ToolCall(Base):
             "id": self.id,
             "message_id": self.message_id,
             "run_id": self.run_id,
+            "tool_call_id": self.tool_call_id,
+            "agent_name": self.agent_name,
             "tool_name": self.tool_name,
             "tool_version": self.tool_version,
             "input_params": self.input_params,
@@ -492,6 +498,7 @@ class AgentRun(Base):
     )
     agent_name = Column(String(100), nullable=False)
     agent_version = Column(String(20), nullable=True)
+    model_name = Column(String(100), nullable=True)  # Which LLM model was used
     status = Column(String(20), default="running", nullable=False)
     input_data = Column(JSON, nullable=True)
     final_result = Column(JSON, nullable=True)
@@ -526,6 +533,7 @@ class AgentRun(Base):
             "trigger_message_id": self.trigger_message_id,
             "agent_name": self.agent_name,
             "agent_version": self.agent_version,
+            "model_name": self.model_name,
             "status": self.status,
             "input_data": self.input_data,
             "final_result": self.final_result,
@@ -537,6 +545,87 @@ class AgentRun(Base):
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "metadata": self.metadata_,
+        }
+
+
+class LLMCall(Base):
+    """
+    A single LLM model invocation within an agent run.
+
+    Tracks individual LLM calls for token accounting, latency analysis,
+    and correlating model outputs with tool calls.
+
+    Attributes:
+        id: Primary key
+        run_id: Parent agent run (FK)
+        agent_name: Which agent/subagent made this call
+        model_name: LLM model used
+        call_index: Sequence number within the run (0-based)
+        input_tokens: Prompt tokens consumed
+        output_tokens: Completion tokens consumed
+        reasoning_tokens: Reasoning/thinking tokens
+        visible_tokens: Visible output tokens (excluding reasoning)
+        elapsed_s: Wall-clock seconds for this call
+        response_text: LLM's text output
+        has_tool_calls: Whether the response included tool calls
+        tool_names: Names of tools called in this response
+        tool_call_ids: Correlation IDs linking to ToolCall records
+        created_at: When this call was made
+    """
+
+    __tablename__ = "llm_calls"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(
+        Integer,
+        ForeignKey("agent_runs.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    agent_name = Column(String(100), default="", nullable=False)
+    model_name = Column(String(100), nullable=True)
+    call_index = Column(Integer, default=0, nullable=False)
+    input_tokens = Column(Integer, default=0, nullable=False)
+    output_tokens = Column(Integer, default=0, nullable=False)
+    reasoning_tokens = Column(Integer, default=0, nullable=False)
+    visible_tokens = Column(Integer, default=0, nullable=False)
+    elapsed_s = Column(Numeric(10, 3), nullable=True)
+    response_text = Column(Text, nullable=True)
+    has_tool_calls = Column(Integer, default=0, nullable=False)  # SQLite-friendly boolean
+    tool_names = Column(JSON, nullable=True)
+    tool_call_ids = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=_utc_now, nullable=False)
+
+    # Relationships
+    agent_run = relationship("AgentRun", backref="llm_calls")
+
+    __table_args__ = (
+        Index("idx_llm_calls_run_id", "run_id"),
+        Index("idx_llm_calls_agent_name", "agent_name"),
+        Index("idx_llm_calls_model_name", "model_name"),
+        Index("idx_llm_calls_created_at", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<LLMCall id={self.id} agent={self.agent_name} model={self.model_name}>"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "id": self.id,
+            "run_id": self.run_id,
+            "agent_name": self.agent_name,
+            "model_name": self.model_name,
+            "call_index": self.call_index,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "reasoning_tokens": self.reasoning_tokens,
+            "visible_tokens": self.visible_tokens,
+            "elapsed_s": float(self.elapsed_s) if self.elapsed_s else None,
+            "response_text": self.response_text,
+            "has_tool_calls": bool(self.has_tool_calls),
+            "tool_names": self.tool_names,
+            "tool_call_ids": self.tool_call_ids,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 

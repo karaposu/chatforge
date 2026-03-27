@@ -25,6 +25,7 @@ from chatforge.adapters.storage.models.models import (
     Base,
     Chat,
     ExtractedProfilingData,
+    LLMCall,
     Message,
     Participant,
     ProfilingDataExtractionRun,
@@ -39,6 +40,7 @@ __all__ = [
     "Message",
     "Attachment",
     "ToolCall",
+    "LLMCall",
     "AgentRun",
     # Profiling data extraction models
     "ProfilingDataExtractionRun",

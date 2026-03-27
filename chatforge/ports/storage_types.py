@@ -300,6 +300,8 @@ class ToolCallRecord:
         id: Unique identifier
         message_id: Which message triggered this
         run_id: Part of which agent run
+        tool_call_id: LangGraph-assigned correlation ID from tc["id"]
+        agent_name: Which subagent invoked this tool
         tool_version: Version if tracked
         output_data: Result from the tool
         status: 'pending', 'running', 'success', 'error', 'timeout', 'cancelled'
@@ -314,6 +316,8 @@ class ToolCallRecord:
     id: int | str | None = None
     message_id: int | str | None = None
     run_id: int | str | None = None
+    tool_call_id: str | None = None
+    agent_name: str | None = None
     tool_version: str | None = None
     output_data: dict[str, Any] | None = None
     status: str = "pending"
@@ -329,6 +333,8 @@ class ToolCallRecord:
             "id": self.id,
             "message_id": self.message_id,
             "run_id": self.run_id,
+            "tool_call_id": self.tool_call_id,
+            "agent_name": self.agent_name,
             "tool_name": self.tool_name,
             "tool_version": self.tool_version,
             "input_params": self.input_params,
@@ -355,6 +361,7 @@ class AgentRunRecord:
         id: Unique identifier
         trigger_message_id: Message that triggered this run
         agent_version: Version if tracked
+        model_name: Which LLM model was used (e.g., "gpt-5", "claude-sonnet-4-6")
         status: 'running', 'completed', 'failed', 'cancelled'
         input_data: Initial input to the agent
         final_result: Final output from the agent
@@ -372,6 +379,7 @@ class AgentRunRecord:
     id: int | str | None = None
     trigger_message_id: int | str | None = None
     agent_version: str | None = None
+    model_name: str | None = None
     status: str = "running"
     input_data: dict[str, Any] | None = None
     final_result: dict[str, Any] | None = None
@@ -392,6 +400,7 @@ class AgentRunRecord:
             "trigger_message_id": self.trigger_message_id,
             "agent_name": self.agent_name,
             "agent_version": self.agent_version,
+            "model_name": self.model_name,
             "status": self.status,
             "input_data": self.input_data,
             "final_result": self.final_result,
@@ -403,6 +412,73 @@ class AgentRunRecord:
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "metadata": self.metadata,
+        }
+
+
+# =============================================================================
+# LLM Call Records
+# =============================================================================
+
+
+@dataclass
+class LLMCallRecord:
+    """
+    A single LLM model invocation within an agent run.
+
+    Tracks individual LLM calls for token accounting, latency analysis,
+    and correlating model outputs with tool calls.
+
+    Attributes:
+        id: Unique identifier
+        run_id: Parent agent run
+        agent_name: Which agent/subagent made this call
+        model_name: LLM model used (e.g., "gpt-5", "claude-sonnet-4-6")
+        call_index: Sequence number within the run (0-based)
+        input_tokens: Prompt tokens consumed
+        output_tokens: Completion tokens consumed
+        reasoning_tokens: Reasoning/thinking tokens (if applicable)
+        visible_tokens: Visible output tokens (excluding reasoning)
+        elapsed_s: Wall-clock seconds for this call
+        response_text: LLM's text output
+        has_tool_calls: Whether the response included tool calls
+        tool_names: Names of tools called in this response
+        tool_call_ids: Correlation IDs linking to ToolCallRecord
+        created_at: When this call was made
+    """
+    id: int | str | None = None
+    run_id: int | str | None = None
+    agent_name: str = ""
+    model_name: str | None = None
+    call_index: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    reasoning_tokens: int = 0
+    visible_tokens: int = 0
+    elapsed_s: float | None = None
+    response_text: str | None = None
+    has_tool_calls: bool = False
+    tool_names: list[str] | None = None
+    tool_call_ids: list[str] | None = None
+    created_at: datetime = field(default_factory=_utc_now)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "id": self.id,
+            "run_id": self.run_id,
+            "agent_name": self.agent_name,
+            "model_name": self.model_name,
+            "call_index": self.call_index,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "reasoning_tokens": self.reasoning_tokens,
+            "visible_tokens": self.visible_tokens,
+            "elapsed_s": self.elapsed_s,
+            "response_text": self.response_text,
+            "has_tool_calls": self.has_tool_calls,
+            "tool_names": self.tool_names,
+            "tool_call_ids": self.tool_call_ids,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 

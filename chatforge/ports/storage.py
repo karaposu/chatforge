@@ -269,6 +269,8 @@ class StoragePort(ABC):
         tool_name: str,
         input_params: dict[str, Any],
         run_id: int | None = None,
+        tool_call_id: str | None = None,
+        agent_name: str | None = None,
         tool_version: str | None = None,
     ) -> ToolCallRecord:
         """
@@ -279,6 +281,8 @@ class StoragePort(ABC):
             tool_name: Name of the tool
             input_params: Parameters passed to the tool
             run_id: Part of which agent run
+            tool_call_id: LangGraph-assigned correlation ID
+            agent_name: Which subagent invoked this tool
             tool_version: Tool version if tracked
 
         Returns:
@@ -313,6 +317,7 @@ class StoragePort(ABC):
         agent_name: str,
         trigger_message_id: int | None = None,
         agent_version: str | None = None,
+        model_name: str | None = None,
         input_data: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> AgentRunRecord:
@@ -324,6 +329,7 @@ class StoragePort(ABC):
             agent_name: Name/type of agent
             trigger_message_id: Message that triggered this run
             agent_version: Version if tracked
+            model_name: Which LLM model was used
             input_data: Initial input
             metadata: App-specific data
 
