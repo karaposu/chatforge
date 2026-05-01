@@ -1,20 +1,16 @@
 """
-Storage Repositories for Chatforge.
+Backward-compatibility shim.
 
-Provides sync and async repository implementations for
-database operations using SQLAlchemy ORM models.
-
-Usage (sync):
-    from chatforge.adapters.storage.repositories.sync import (
-        ChatRepository,
-        MessageRepository,
-        CPDE7Repository,
-    )
-
-Usage (async):
-    from chatforge.adapters.storage.repositories.async_ import (
-        ChatRepository,
-        MessageRepository,
-        CPDE7Repository,
-    )
+Repositories have moved to chatforge.adapters.storage.sqlalchemy.repositories.
 """
+
+from chatforge.adapters.storage.sqlalchemy.repositories import (
+    SQLAlchemyChatRepo,
+    SQLAlchemyMessageRepo,
+    SQLAlchemyProfilingRepo,
+)
+
+# Legacy aliases
+ChatRepository = SQLAlchemyChatRepo
+MessageRepository = SQLAlchemyMessageRepo
+CPDE7Repository = SQLAlchemyProfilingRepo
