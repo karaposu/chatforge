@@ -11,8 +11,9 @@ from chatforge.adapters.null import (
     NullAudioStreamAdapter,
 )
 from chatforge.adapters.storage import (
-    InMemoryStorageAdapter,
-    SQLiteStorageAdapter,
+    SQLAlchemyChatRepo,
+    SQLAlchemyMessageRepo,
+    SQLAlchemyProfilingRepo,
 )
 from chatforge.adapters.tts import (
     ElevenLabsTTSAdapter,
@@ -27,8 +28,9 @@ from chatforge.ports import NullTracingAdapter
 
 __all__ = [
     # Storage
-    "InMemoryStorageAdapter",
-    "SQLiteStorageAdapter",
+    "SQLAlchemyChatRepo",
+    "SQLAlchemyMessageRepo",
+    "SQLAlchemyProfilingRepo",
     # TTS
     "ElevenLabsTTSAdapter",
     "ElevenLabsVoiceConfig",

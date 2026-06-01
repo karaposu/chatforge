@@ -35,8 +35,9 @@ For middleware:
 
 For adapters:
     from chatforge.adapters import (
-        InMemoryStorageAdapter,
-        SQLiteStorageAdapter,
+        SQLAlchemyChatRepo,
+        SQLAlchemyMessageRepo,
+        SQLAlchemyProfilingRepo,
         NullMessagingAdapter,
     )
 """

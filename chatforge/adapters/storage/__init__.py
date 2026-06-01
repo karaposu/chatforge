@@ -1,36 +1,38 @@
 """
-Chatforge Storage Adapters - Implementations of StoragePort.
+Chatforge Storage Adapters - Implementations of repository interfaces.
 
-Provides multiple storage backends:
-- InMemoryStorageAdapter: Fast, non-persistent (testing, development)
-- SQLiteStorageAdapter: File-based persistence (simple deployments)
-- SQLAlchemyStorageAdapter: Full ORM support (PostgreSQL, MySQL, etc.)
+Per-entity SQLAlchemy async repositories implementing the abstract
+interfaces defined in chatforge.ports.storage.
 
 Example:
-    # Simple in-memory storage
-    from chatforge.adapters.storage import InMemoryStorageAdapter
-    storage = InMemoryStorageAdapter()
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from chatforge.ports.storage import Storage
+    from chatforge.adapters.storage import (
+        SQLAlchemyChatRepo,
+        SQLAlchemyMessageRepo,
+        SQLAlchemyProfilingRepo,
+    )
 
-    # SQLite persistence
-    from chatforge.adapters.storage import SQLiteStorageAdapter
-    storage = SQLiteStorageAdapter("./data/chatforge.db")
+    engine = create_async_engine("sqlite+aiosqlite:///./data/chatforge.db")
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
 
-    # PostgreSQL with SQLAlchemy
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    from chatforge.adapters.storage import SQLAlchemyStorageAdapter
-
-    engine = create_engine("postgresql://user:pass@localhost/db")
-    Session = sessionmaker(bind=engine)
-    storage = SQLAlchemyStorageAdapter(engine, Session)
+    async with async_session() as session:
+        storage = Storage(
+            chats=SQLAlchemyChatRepo(session),
+            messages=SQLAlchemyMessageRepo(session),
+            profiling=SQLAlchemyProfilingRepo(session),
+        )
+        chat = await storage.chats.create_chat(user_id=1)
 """
 
-from chatforge.adapters.storage.memory import InMemoryStorageAdapter
-from chatforge.adapters.storage.sqlite import SQLiteStorageAdapter
-from chatforge.adapters.storage.sqlalchemy import SQLAlchemyStorageAdapter
+from chatforge.adapters.storage.sqlalchemy import (
+    SQLAlchemyChatRepo,
+    SQLAlchemyMessageRepo,
+    SQLAlchemyProfilingRepo,
+)
 
 __all__ = [
-    "InMemoryStorageAdapter",
-    "SQLiteStorageAdapter",
-    "SQLAlchemyStorageAdapter",
+    "SQLAlchemyChatRepo",
+    "SQLAlchemyMessageRepo",
+    "SQLAlchemyProfilingRepo",
 ]

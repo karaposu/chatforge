@@ -7,14 +7,15 @@ Usage:
     from fastapi import FastAPI
     from chatforge.adapters.fastapi import create_chat_router
     from chatforge.services.agent import ReActAgent
-    from chatforge.adapters import InMemoryStorageAdapter
 
     app = FastAPI()
     agent = ReActAgent(tools=[], system_prompt="You are helpful.")
-    storage = InMemoryStorageAdapter()
 
-    router = create_chat_router(agent=agent, storage=storage)
+    router = create_chat_router(agent=agent)
     app.include_router(router, prefix="/api/v1")
+
+    # NOTE: storage paths in this adapter are pending migration to the
+    # new Storage facade. Use stateless mode (no `storage=...`) for now.
 """
 
 from chatforge.adapters.fastapi.routes import create_chat_router

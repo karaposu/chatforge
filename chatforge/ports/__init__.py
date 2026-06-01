@@ -28,22 +28,31 @@ from chatforge.ports.messaging_platform_integration import (
     MessagingPlatformIntegrationPort,
 )
 from chatforge.ports.storage import (
-    # Core types
-    StoragePort,
-    MessageRecord,
-    MessageMetadata,
-    # New types
+    # Storage facade
+    Storage,
+    # Repository interfaces
+    ChatRepository,
+    MessageRepository,
+    ToolCallRepository,
+    AgentRunRepository,
+    LLMCallRepository,
+    ProfilingRepository,
+)
+from chatforge.domain.storage import (
+    # Records
     ChatRecord,
-    ChatMetadata,
+    MessageRecord,
+    ParticipantRecord,
+    AttachmentRecord,
     ToolCallRecord,
     AgentRunRecord,
-    TokenUsage,
-    # Profiling data extraction types
+    LLMCallRecord,
     ProfilingDataExtractionRun,
     ExtractedProfilingData,
-    # Legacy aliases (for backward compatibility)
-    ConversationRecord,
-    ConversationMetadata,
+    # TypedDict metadata
+    ChatMetadata,
+    MessageMetadata,
+    TokenUsage,
 )
 from chatforge.ports.tracing import (
     NullTracingAdapter,
@@ -153,21 +162,27 @@ __all__ = [
     "ConversationContext",
     "FileAttachment",
     "Message",
-    # Storage
-    "StoragePort",
-    "MessageRecord",
-    "MessageMetadata",
+    # Storage facade + repos
+    "Storage",
+    "ChatRepository",
+    "MessageRepository",
+    "ToolCallRepository",
+    "AgentRunRepository",
+    "LLMCallRepository",
+    "ProfilingRepository",
+    # Storage records
     "ChatRecord",
-    "ChatMetadata",
+    "MessageRecord",
+    "ParticipantRecord",
+    "AttachmentRecord",
     "ToolCallRecord",
     "AgentRunRecord",
-    "TokenUsage",
-    # Profiling data extraction
+    "LLMCallRecord",
     "ProfilingDataExtractionRun",
     "ExtractedProfilingData",
-    # Legacy aliases
-    "ConversationRecord",
-    "ConversationMetadata",
+    "ChatMetadata",
+    "MessageMetadata",
+    "TokenUsage",
     # Knowledge
     "KnowledgePort",
     "KnowledgeResult",

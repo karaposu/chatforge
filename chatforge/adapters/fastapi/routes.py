@@ -53,7 +53,18 @@ from chatforge.adapters.fastapi.schemas import (
     ProcessMemoryStats,
     StreamChunk,
 )
-from chatforge.ports import MessageRecord, StoragePort
+from chatforge.ports import Storage
+
+# TODO: This adapter was built against the old monolithic StoragePort which
+# treated conversations as flat (session_id: str -> messages). The new repo
+# model is Chat (int PK) + Participant + Message, requiring an external_id
+# mapping for session_id and per-participant message attribution. Storage
+# code paths below are gated with NotImplementedError until rewritten.
+_STORAGE_NOT_MIGRATED = (
+    "FastAPI adapter storage paths not yet migrated to new Storage facade. "
+    "Use the adapter without `storage=...` for stateless mode, or rewire "
+    "to use chatforge.ports.storage.Storage with chat_id + Participant."
+)
 
 
 if TYPE_CHECKING:
@@ -66,7 +77,7 @@ logger = logging.getLogger(__name__)
 
 def create_chat_router(
     agent: ReActAgent,
-    storage: StoragePort | None = None,
+    storage: Storage | None = None,
     cleanup_runner: AsyncCleanupRunner | None = None,
     version: str = "1.0.0",
     prefix: str = "",
@@ -80,7 +91,8 @@ def create_chat_router(
 
     Args:
         agent: ReActAgent instance for processing messages.
-        storage: Optional StoragePort for conversation persistence.
+        storage: Optional Storage facade for conversation persistence.
+            NOTE: storage paths are not yet migrated; pass None for now.
         cleanup_runner: Optional cleanup runner for memory management.
         version: API version string for health endpoint.
         prefix: Optional URL prefix for all routes.
@@ -93,13 +105,11 @@ def create_chat_router(
         from fastapi import FastAPI
         from chatforge.adapters.fastapi import create_chat_router
         from chatforge.services.agent import ReActAgent
-        from chatforge.adapters import InMemoryStorageAdapter
 
         app = FastAPI()
         agent = ReActAgent(tools=[], system_prompt="You are helpful.")
-        storage = InMemoryStorageAdapter()
 
-        router = create_chat_router(agent=agent, storage=storage)
+        router = create_chat_router(agent=agent)
         app.include_router(router, prefix="/api/v1")
     """
     router = APIRouter(prefix=prefix, tags=tags or ["chat"])
@@ -127,9 +137,7 @@ def create_chat_router(
             # Get conversation history if storage available
             history: list[dict[str, str]] = []
             if storage:
-                conv = await storage.get_conversation(session_id, limit=50)
-                if conv:
-                    history = [{"role": m.role, "content": m.content} for m in conv.messages]
+                raise NotImplementedError(_STORAGE_NOT_MIGRATED)
 
             # Build context
             context: dict[str, Any] = {
@@ -150,16 +158,7 @@ def create_chat_router(
 
             # Save messages if storage available
             if storage:
-                # Save user message
-                await storage.save_message(
-                    conversation_id=session_id,
-                    message=MessageRecord(content=request.message, role="user"),
-                )
-                # Save assistant response
-                await storage.save_message(
-                    conversation_id=session_id,
-                    message=MessageRecord(content=response, role="assistant"),
-                )
+                raise NotImplementedError(_STORAGE_NOT_MIGRATED)
 
             logger.info(f"Chat processed: session={session_id}, trace_id={trace_id}")
 
@@ -196,11 +195,7 @@ def create_chat_router(
                 # Get history if storage available
                 history: list[dict[str, str]] = []
                 if storage:
-                    conv = await storage.get_conversation(session_id, limit=50)
-                    if conv:
-                        history = [
-                            {"role": m.role, "content": m.content} for m in conv.messages
-                        ]
+                    raise NotImplementedError(_STORAGE_NOT_MIGRATED)
 
                 # Build context
                 context: dict[str, Any] = {
@@ -227,14 +222,7 @@ def create_chat_router(
 
                 # Save messages if storage available
                 if storage:
-                    await storage.save_message(
-                        conversation_id=session_id,
-                        message=MessageRecord(content=request.message, role="user"),
-                    )
-                    await storage.save_message(
-                        conversation_id=session_id,
-                        message=MessageRecord(content=response, role="assistant"),
-                    )
+                    raise NotImplementedError(_STORAGE_NOT_MIGRATED)
 
                 # Send done event
                 done_event = StreamChunk(
@@ -280,18 +268,7 @@ def create_chat_router(
         """Get conversation history."""
         if not storage:
             raise HTTPException(status_code=501, detail="Storage not configured")
-
-        conv = await storage.get_conversation(conversation_id, limit=limit)
-        if not conv:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-
-        return ConversationResponse(
-            conversation_id=conversation_id,
-            messages=[{"role": m.role, "content": m.content} for m in conv.messages],
-            user_id=conv.user_id,
-            created_at=conv.created_at,
-            updated_at=conv.updated_at,
-        )
+        raise HTTPException(status_code=501, detail=_STORAGE_NOT_MIGRATED)
 
     @router.delete(
         "/conversations/{conversation_id}",
@@ -306,12 +283,7 @@ def create_chat_router(
         """Delete a conversation."""
         if not storage:
             raise HTTPException(status_code=501, detail="Storage not configured")
-
-        deleted = await storage.delete_conversation(conversation_id)
-        if not deleted:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-
-        return {"message": "Conversation deleted", "conversation_id": conversation_id}
+        raise HTTPException(status_code=501, detail=_STORAGE_NOT_MIGRATED)
 
     @router.get(
         "/conversations",
@@ -329,22 +301,7 @@ def create_chat_router(
         """List conversations."""
         if not storage:
             raise HTTPException(status_code=501, detail="Storage not configured")
-
-        conversations = await storage.list_conversations(user_id=user_id, limit=limit)
-
-        return ConversationListResponse(
-            conversations=[
-                ConversationResponse(
-                    conversation_id=c.conversation_id,
-                    messages=[],  # Don't include messages in list view
-                    user_id=c.user_id,
-                    created_at=c.created_at,
-                    updated_at=c.updated_at,
-                )
-                for c in conversations
-            ],
-            total=len(conversations),
-        )
+        raise HTTPException(status_code=501, detail=_STORAGE_NOT_MIGRATED)
 
     # =========================================================================
     # HEALTH ENDPOINT
@@ -360,8 +317,8 @@ def create_chat_router(
         """Health check endpoint."""
         components: dict[str, bool] = {}
 
-        # Check storage if available
-        if storage and hasattr(storage, "health_check"):
+        # Check storage if available (Storage facade has a no-op health_check)
+        if storage is not None:
             components["storage"] = await storage.health_check()
 
         all_healthy = all(components.values()) if components else True

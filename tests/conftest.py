@@ -137,29 +137,10 @@ def anthropic_api_key():
 # =============================================================================
 # STORAGE FIXTURES
 # =============================================================================
-
-@pytest.fixture
-async def in_memory_storage():
-    """InMemoryStorageAdapter instance for testing."""
-    from chatforge.adapters.storage import InMemoryStorageAdapter
-
-    adapter = InMemoryStorageAdapter()
-    yield adapter
-    # Cleanup not needed for in-memory
-
-
-@pytest.fixture
-async def sqlite_storage_temp(tmp_path):
-    """SQLiteStorageAdapter with temporary database."""
-    from chatforge.adapters.storage import SQLiteStorageAdapter
-
-    db_path = tmp_path / "test.db"
-    adapter = SQLiteStorageAdapter(database_path=str(db_path))
-    await adapter.setup()
-
-    yield adapter
-
-    await adapter.close()
+# NOTE: legacy fixtures (in_memory_storage, sqlite_storage_temp) were removed
+# along with the InMemoryStorageAdapter / SQLiteStorageAdapter monoliths.
+# When in-memory testing is needed for the new repos, build SQLAlchemy +
+# aiosqlite (sqlite+aiosqlite:///:memory:) fixtures here.
 
 
 # =============================================================================

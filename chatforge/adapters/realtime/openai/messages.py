@@ -14,15 +14,15 @@ logger = logging.getLogger(__name__)
 
 
 def session_update(config: VoiceSessionConfig) -> dict:
-    """Create session.update message."""
-    session = {
-        "modalities": config.modalities,
-        "temperature": config.temperature,
-    }
+    """Create session.update message (GA API shape)."""
+    # GA API: output_modalities must be exactly ["audio"] OR ["text"], not both.
+    modalities = config.modalities or ["audio"]
+    output_modalities = ["audio"] if "audio" in modalities else ["text"]
 
-    # Voice
-    if config.voice != "default":
-        session["voice"] = config.voice
+    session: dict[str, Any] = {
+        "type": "realtime",
+        "output_modalities": output_modalities,
+    }
 
     # Instructions
     if config.system_prompt:
@@ -35,30 +35,37 @@ def session_update(config: VoiceSessionConfig) -> dict:
     if config.max_tokens:
         session["max_response_output_tokens"] = config.max_tokens
 
-    # Audio format
-    session["input_audio_format"] = config.input_format
-    session["output_audio_format"] = config.output_format
+    # ---- Audio block ----
+    audio_input: dict[str, Any] = {
+        "format": _format_to_ga(config.input_format),
+    }
+    audio_output: dict[str, Any] = {
+        "format": _format_to_ga(config.output_format),
+    }
 
-    # Transcription
+    # Voice (GA: audio.output.voice)
+    if config.voice != "default":
+        audio_output["voice"] = config.voice
+
+    # Transcription (GA: audio.input.transcription)
     if config.transcription_enabled:
-        session["input_audio_transcription"] = {
+        audio_input["transcription"] = {
             "model": config.transcription_model or "whisper-1"
         }
 
-    # Turn detection (VAD)
-    # "server" = use server-side VAD
-    # "client" = client handles VAD, disable server VAD
-    # "none" = no VAD, manual commit required
+    # Turn detection / VAD (GA: audio.input.turn_detection)
     if config.vad_mode == "server":
-        session["turn_detection"] = {
+        audio_input["turn_detection"] = {
             "type": "server_vad",
             "threshold": config.vad_threshold,
             "prefix_padding_ms": config.vad_prefix_ms,
             "silence_duration_ms": config.vad_silence_ms,
             "create_response": True,
         }
-    else:  # "client" or "none" - disable server VAD
-        session["turn_detection"] = None
+    else:
+        audio_input["turn_detection"] = None
+
+    session["audio"] = {"input": audio_input, "output": audio_output}
 
     # Tools
     if config.tools:
@@ -70,6 +77,14 @@ def session_update(config: VoiceSessionConfig) -> dict:
         session.update(config.provider_options)
 
     return {"type": "session.update", "session": session}
+
+
+def _format_to_ga(fmt: str) -> dict:
+    """Convert legacy audio format string (e.g. 'pcm16') to GA format dict."""
+    if isinstance(fmt, dict):
+        return fmt
+    # Most clients use pcm16 @ 24kHz
+    return {"type": "audio/pcm", "rate": 24000}
 
 
 def input_audio_buffer_append(audio: bytes) -> dict:

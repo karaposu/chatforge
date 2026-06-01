@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 # OpenAI Realtime API constants
 OPENAI_REALTIME_URL = "wss://api.openai.com/v1/realtime"
-DEFAULT_MODEL = "gpt-4o-realtime-preview-2025-06-03"
+DEFAULT_MODEL = "gpt-realtime"
 
 # Sentinel value for stopping the event generator
 _STOP_SENTINEL = object()
@@ -153,7 +153,6 @@ class OpenAIRealtimeAdapter(RealtimeVoiceAPIPort):
                 url=f"{OPENAI_REALTIME_URL}?model={model}",
                 headers={
                     "Authorization": f"Bearer {self._api_key}",
-                    "OpenAI-Beta": "realtime=v1",
                 },
                 serializer=JsonSerializer(),
                 connect_timeout=self._connect_timeout,

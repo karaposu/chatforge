@@ -2,6 +2,11 @@
 
 An interpretive layer that sits on top of PRAGMA measurements to explain *why* people engage in conversations, not just *how*.
 
+APT is theory of which categories of belief about another person generate attachment when held 
+C/H/F/R are the additive belief-categories; SP/Coherence/EC are the multiplicative ones that gate or amplify.  Both f (Charm/Hope/Fear/Resonance) and g (SP/Coherence/EC) are receiver-side          
+beliefs/perceptions about the sender; attachment forms from the multiplicative product of those beliefs.                         
+
+maybe we need a better name now since it is all related to belief?
 
 ## What Is APT
 

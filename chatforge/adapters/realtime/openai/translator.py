@@ -51,7 +51,7 @@ def translate_event(raw: dict) -> VoiceEvent | None:
     # Audio Output Events
     # =========================================================================
 
-    if event_type == "response.audio.delta":
+    if event_type in ("response.audio.delta", "response.output_audio.delta"):
         audio_data = _safe_base64_decode(raw.get("delta", ""))
         if audio_data is None:
             return None  # Skip invalid audio data
@@ -66,7 +66,7 @@ def translate_event(raw: dict) -> VoiceEvent | None:
             raw_event=raw,
         )
 
-    if event_type == "response.audio.done":
+    if event_type in ("response.audio.done", "response.output_audio.done"):
         return VoiceEvent(
             type=VoiceEventType.AUDIO_DONE,
             metadata={
@@ -136,7 +136,7 @@ def translate_event(raw: dict) -> VoiceEvent | None:
             raw_event=raw,
         )
 
-    if event_type == "response.audio_transcript.delta":
+    if event_type in ("response.audio_transcript.delta", "response.output_audio_transcript.delta"):
         return VoiceEvent(
             type=VoiceEventType.TRANSCRIPT,
             data=raw.get("delta", ""),
@@ -148,7 +148,7 @@ def translate_event(raw: dict) -> VoiceEvent | None:
             raw_event=raw,
         )
 
-    if event_type == "response.audio_transcript.done":
+    if event_type in ("response.audio_transcript.done", "response.output_audio_transcript.done"):
         return VoiceEvent(
             type=VoiceEventType.TRANSCRIPT,
             data=raw.get("transcript", ""),
